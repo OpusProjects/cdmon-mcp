@@ -30,6 +30,14 @@ export interface PmaConfig {
   user: string;
   password: string;
   database: string;
+  /**
+   * Which hosted domain to sign into, where one phpMyAdmin serves many.
+   *
+   * cdmon runs a single phpMyAdmin across all its customers and picks the
+   * database server from this value. Null for a stock install, which has
+   * nothing to choose between.
+   */
+  domain: string | null;
   timeoutMs: number;
 }
 
@@ -53,6 +61,9 @@ const schema = z.object({
   CDMON_PMA_USER: z.string().min(1).optional(),
   CDMON_PMA_PASS: z.string().min(1).optional(),
   CDMON_PMA_DB: z.string().min(1).optional(),
+  // Not part of the all-or-none group: a stock phpMyAdmin needs no domain, so
+  // requiring it would refuse a configuration that works.
+  CDMON_PMA_DOMAIN: z.string().min(1).optional(),
   CDMON_PMA_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30000),
 
   CDMON_ALLOW_WRITES: z.string().optional(),
@@ -101,6 +112,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         user: e.CDMON_PMA_USER as string,
         password: e.CDMON_PMA_PASS as string,
         database: e.CDMON_PMA_DB as string,
+        domain: e.CDMON_PMA_DOMAIN ?? null,
         timeoutMs: e.CDMON_PMA_TIMEOUT_MS,
       }
     : null;

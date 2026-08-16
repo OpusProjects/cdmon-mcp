@@ -70,7 +70,16 @@ Do not "tidy" these — they were deliberate, and the reasoning is in `docs/deve
 
 ## phpMyAdmin
 
-It is a scraped web session, because cdmon exposes no database API. Two traps:
+It is a scraped web session, because cdmon exposes no database API. Four traps:
+
+- **SQL executes at `route=/import`, not `route=/sql`.** `/sql` renders an already-executed
+  result, so posting a statement there runs nothing and returns a page with no error on it —
+  a no-op reported as success. This was a real bug, found by comparing against a working
+  shell script rather than by any test.
+- **cdmon's phpMyAdmin is shared between all its customers**, so `CDMON_PMA_DOMAIN` selects
+  which database server you reach. It must go on *every* request as `d`, not only the login,
+  and on the login form as `pma_domain`. Without it the login returns the domain picker, which
+  carries no token, and the error reads as a wrong password.
 
 - **The CSRF token rotates on every verified POST.** Re-read it from *every* response (hidden
   input, or the script block on some versions) before the next statement. Reusing the login

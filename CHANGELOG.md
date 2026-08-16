@@ -7,6 +7,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `CDMON_PMA_DOMAIN`, for a phpMyAdmin shared between many customer domains, as cdmon runs.
+  It travels as `d` on every request and `pma_domain` on the login form. Omit it on a stock
+  install.
+
+### Fixed
+
+- SQL is now posted to `index.php?route=/import`, the route that executes it. `/sql` renders an
+  already-executed result, so every statement was a no-op reported as a success.
+
 ## [0.1.0] - 2026-08-17
 
 ### Added

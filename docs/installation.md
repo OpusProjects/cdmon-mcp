@@ -108,6 +108,7 @@ Every setting is an environment variable, and [`.env.example`](../.env.example) 
 | `CDMON_PMA_USER` | — | Database username |
 | `CDMON_PMA_PASS` | — | Database password |
 | `CDMON_PMA_DB` | — | Database name |
+| `CDMON_PMA_DOMAIN` | — | Hosted domain to sign into, on a phpMyAdmin shared between many |
 | `CDMON_PMA_TIMEOUT_MS` | `30000` | HTTP timeout per statement |
 | `CDMON_ALLOW_WRITES` | `0` | Required for uploads, deletes and data-changing SQL |
 | `CDMON_AUDIT_LOG` | `./cdmon-audit.log` | Where the record of every write is appended |
@@ -117,6 +118,12 @@ Booleans accept `1`, `true`, `yes` and `on`; anything else is false.
 `CDMON_FTP_ROOT` is worth setting narrowly. It is the boundary the path guard enforces, and on
 shared hosting an FTP account often has reach above the document root — sometimes into another
 site entirely.
+
+`CDMON_PMA_DOMAIN` is required on cdmon and absent on a stock install. cdmon runs one
+phpMyAdmin for every customer and resolves which database server you reach from that value.
+Leaving it out does not produce a useful error: the login returns the domain picker, the picker
+carries no token, and the failure surfaces as *no token in the response* — which reads like a
+wrong password and sends you checking the wrong thing.
 
 ---
 

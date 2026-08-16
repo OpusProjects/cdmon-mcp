@@ -17,6 +17,12 @@
  * single summary, so a file could half-apply and still report success. One request per
  * statement is slower and worth it: every statement gets its own result, and a failure
  * names the statement that caused it and how many had already landed.
+ *
+ * On a phpMyAdmin shared between many customer domains - which is what cdmon runs - the
+ * domain is part of the session rather than something chosen after logging in. Configure
+ * CDMON_PMA_DOMAIN and it travels as `d` on every request and `pma_domain` on the login
+ * form. Omitting it against such a host does not produce an error: the login returns the
+ * domain picker, which carries no token, and the failure then reads as a wrong password.
  */
 
 import * as cheerio from "cheerio";
@@ -104,12 +110,7 @@ export class PhpMyAdminClient {
     const loginPage = await this.get("/index.php");
     const $ = cheerio.load(loginPage);
 
-    const form = new URLSearchParams({
-      pma_username: this.cfg.user,
-      pma_password: this.cfg.password,
-      server: "1",
-      target: "index.php",
-    });
+    const form = loginForm(this.cfg);
 
     // Both hidden fields are required. Their names have been stable for years, but a
     // missing one produces a login page rather than an error, so it is checked here where
@@ -125,7 +126,12 @@ export class PhpMyAdminClient {
 
     if (!token) {
       throw new Error(
-        "phpMyAdmin login failed: no token in the response. Check CDMON_PMA_USER and CDMON_PMA_PASS.",
+        "phpMyAdmin login failed: no token in the response. Check CDMON_PMA_USER and " +
+          "CDMON_PMA_PASS" +
+          (this.cfg.domain
+            ? `, and that CDMON_PMA_DOMAIN (${this.cfg.domain}) is a domain on this account.`
+            : ". If this phpMyAdmin serves several domains, set CDMON_PMA_DOMAIN: without " +
+              "it the login returns the domain picker, which carries no token."),
       );
     }
     this.token = token;
@@ -135,12 +141,19 @@ export class PhpMyAdminClient {
   private async runOne(stmt: Statement, total: number, maxRows: number): Promise<StatementResult> {
     const form = new URLSearchParams({
       db: this.cfg.database,
+      // phpMyAdmin scopes the query to a table when this is set; empty means the database.
+      table: "",
       sql_query: stmt.sql,
       token: this.token as string,
       session_max_rows: String(maxRows),
+      show_query: "1",
+      is_js_confirmed: "0",
     });
 
-    const html = await this.post("/index.php?route=/sql", form);
+    // /import, not /sql. This is the endpoint the SQL tab submits to; /sql renders an
+    // already-executed result, so posting a statement there runs nothing and returns a
+    // page with no error on it - a silent no-op reported as success.
+    const html = await this.post("/index.php?route=/import", form);
     const $ = cheerio.load(html);
 
     // The token rotates on every verified POST. Missing this means the next statement is
@@ -180,7 +193,7 @@ export class PhpMyAdminClient {
     }
     if (body) headers["content-type"] = "application/x-www-form-urlencoded";
 
-    const res = await fetch(`${this.cfg.url}${pathname}`, {
+    const res = await fetch(buildUrl(this.cfg.url, pathname, this.cfg.domain), {
       method: body ? "POST" : "GET",
       body,
       headers,
@@ -253,6 +266,53 @@ function readReportedTotal($: cheerio.CheerioAPI): number | null {
   const text = $("body").text();
   const match = /\((\d+)\s+total/i.exec(text);
   return match?.[1] !== undefined ? Number(match[1]) : null;
+}
+
+/**
+ * Build a request URL, carrying the domain selector when there is one.
+ *
+ * Exported for testing. Every request needs `d`, not just the login: the selector scopes the
+ * session, and a later request without it can be answered by a different server than the one
+ * the session was established on.
+ *
+ * @param base     phpMyAdmin base URL, with no trailing slash.
+ * @param pathname Path, which may already carry a query string of its own.
+ * @param domain   Hosted domain to select, or null for a stock install.
+ */
+export function buildUrl(base: string, pathname: string, domain: string | null): string {
+  if (!domain) return `${base}${pathname}`;
+  const separator = pathname.includes("?") ? "&" : "?";
+  return `${base}${pathname}${separator}d=${encodeURIComponent(domain)}`;
+}
+
+/**
+ * The login form's fields, before the hidden ones are read off the page.
+ *
+ * Exported for testing, because getting this wrong raises nothing: the server answers with a
+ * page either way, and the mistake surfaces later as a missing token.
+ *
+ * @param cfg Configuration, whose domain decides which shape the form takes.
+ */
+export function loginForm(cfg: PmaConfig): URLSearchParams {
+  const form = new URLSearchParams({
+    pma_username: cfg.user,
+    pma_password: cfg.password,
+    target: "index.php",
+  });
+
+  if (cfg.domain) {
+    // A shared phpMyAdmin resolves the server from the domain, so `server` is not ours to
+    // choose - sending 1 as well would name a server this account may not have.
+    form.set("pma_domain", cfg.domain);
+    form.set("route", "/");
+    // Otherwise the interface language follows the browser, and the strings read back out
+    // of the page - "total", the error classes - are the English ones.
+    form.set("lang", "en");
+  } else {
+    form.set("server", "1");
+  }
+
+  return form;
 }
 
 /** Some versions only surface the rotated token inside a script block. */

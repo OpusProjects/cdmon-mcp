@@ -5,6 +5,7 @@ How the database half works, and exactly which parts of somebody else's web inte
 ## Table of contents
 
 - [Why a web session](#why-a-web-session)
+- [The domain selector](#the-domain-selector)
 - [The login sequence](#the-login-sequence)
 - [The token rotates](#the-token-rotates)
 - [Running a statement](#running-a-statement)
@@ -25,6 +26,31 @@ everything here depends on markup nobody promised to keep stable, which is why t
 
 ---
 
+## The domain selector
+
+cdmon runs one phpMyAdmin across every customer, and the domain is part of the session rather
+than something chosen after logging in.
+
+Set `CDMON_PMA_DOMAIN` and it travels two ways: as `d` on the query string of **every** request,
+and as `pma_domain` on the login form. Both are needed — the selector scopes the session, so a
+later request without it can be answered by a different server than the one the session was
+established on.
+
+| Configured | Login sends | Every URL carries |
+|---|---|---|
+| A domain | `pma_domain`, `route=/`, `lang=en` | `?d=<domain>` |
+| No domain | `server=1` | nothing extra |
+
+`lang=en` goes with it because the response is read by matching English strings — the `(N total`
+count, the error classes. Letting the server pick a language from the request would make the
+parsing quietly return nothing in another locale.
+
+Omitting the domain against a shared install is the failure worth recognising: the login returns
+the domain picker, the picker carries no token, and the client reports *no token in the
+response*, which reads exactly like a wrong password.
+
+---
+
 ## The login sequence
 
 Two requests, because the login form carries hidden fields that must be echoed back.
@@ -32,7 +58,7 @@ Two requests, because the login form carries hidden fields that must be echoed b
 | Step | Request | Purpose |
 |---|---|---|
 | 1 | `GET /index.php` | Fetch the login page, and the `token` and `set_session` hidden fields |
-| 2 | `POST /index.php` | Send `pma_username`, `pma_password`, `server=1`, plus those fields |
+| 2 | `POST /index.php` | Send `pma_username`, `pma_password`, the domain or server fields, plus those hidden fields |
 
 Cookies from both are kept and sent onward. A missing hidden field does not produce an error —
 it produces the login page again, which then fails three requests later as something that looks
@@ -54,14 +80,22 @@ replaced before the next statement goes out.
 
 ## Running a statement
 
-One `POST /index.php?route=/sql` per statement, never several at once.
+One `POST /index.php?route=/import` per statement, never several at once.
 
 ```
 db=your_database
+table=
 sql_query=SELECT id FROM users LIMIT 5
 token=<current token>
 session_max_rows=200
+show_query=1
+is_js_confirmed=0
 ```
+
+`/import` is the route the SQL tab submits to, and the one that executes. `/sql` renders an
+already-executed result, so posting a statement there runs nothing and answers with a page
+carrying no error on it — a no-op reported as a success, which is the worst shape a bug can
+take here.
 
 The splitting happens before any of this, in `sql.ts`. It is a small state machine rather than a
 `split(";")`, because a semicolon inside a string, an identifier or a comment is not a statement
@@ -97,10 +131,11 @@ The full list, so the blast radius of an upstream change is knowable rather than
 
 | Kind | Value |
 |---|---|
-| Form field | `pma_username`, `pma_password`, `server`, `target` |
+| Form field | `pma_username`, `pma_password`, `target`, and either `server` or `pma_domain` + `route` + `lang` |
 | Hidden field | `token`, `set_session` |
-| Route | `/index.php`, `/index.php?route=/sql` |
-| Query field | `db`, `sql_query`, `token`, `session_max_rows` |
+| Route | `/index.php`, `/index.php?route=/import` |
+| Query param | `d` (only when a domain is configured) |
+| Query field | `db`, `table`, `sql_query`, `token`, `session_max_rows`, `show_query`, `is_js_confirmed` |
 | Selector | `input[name="token"]`, `.error`, `.alert-danger`, `.result_query`, `.success`, `.alert-success`, `table.table_results tbody tr`, `td[data-type]`, `td.data` |
 
 Tested against phpMyAdmin 5.x. These names have been stable for years, which is a reason for
@@ -122,9 +157,10 @@ update the selector, add a test that would have caught it, and note the version 
 
 The three failures worth recognising on sight.
 
-**`no token in the response`** — the login was rejected. Check `CDMON_PMA_USER` and
-`CDMON_PMA_PASS` by signing in through a browser with the same values. It is almost always
-credentials rather than markup.
+**`no token in the response`** — the login did not complete. Check `CDMON_PMA_USER` and
+`CDMON_PMA_PASS` by signing in through a browser with the same values. If those are right, the
+next suspect is `CDMON_PMA_DOMAIN`: on a shared install the domain picker answers with no token
+and produces this same message.
 
 **First statement works, second fails** — the token did not rotate. That is this tool's bug, not
 your configuration, and it belongs in the issue tracker.

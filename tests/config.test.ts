@@ -62,6 +62,15 @@ describe("loadConfig", () => {
     expect(config.pma?.url).toBe("https://pma.example.invalid");
   });
 
+  it("leaves the domain selector null unless one is given", () => {
+    // A stock phpMyAdmin has nothing to select, so requiring it would refuse a working
+    // configuration. It sits outside the all-or-none group on purpose.
+    expect(loadConfig(env(PMA_ENV)).pma?.domain).toBeNull();
+    expect(loadConfig(env(PMA_ENV, { CDMON_PMA_DOMAIN: "site.example" })).pma?.domain).toBe(
+      "site.example",
+    );
+  });
+
   it("rejects a phpMyAdmin URL that is not a URL", () => {
     expect(() => loadConfig(env(PMA_ENV, { CDMON_PMA_URL: "pma.example.invalid" }))).toThrow(
       /Invalid configuration/,
