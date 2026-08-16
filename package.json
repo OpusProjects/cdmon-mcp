@@ -46,14 +46,14 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "basic-ftp": "^5.0.5",
-    "cheerio": "^1.0.0",
-    "zod": "^3.23.8"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "basic-ftp": "^6.2.0",
+    "cheerio": "^1.2.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
