@@ -185,6 +185,22 @@ export function isReadOnly(sql: string): boolean {
   return /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sql.trim());
 }
 
+/**
+ * The first statement in `sql` that is not read-only, or null if they all are.
+ *
+ * Split out from the callers on purpose. A read-only guarantee that each entry point
+ * implements for itself is one that holds until somebody adds an entry point and forgets -
+ * which is exactly what happened: the MCP tool checked, the CLI command did not, and
+ * `db:query "UPDATE ..."` ran the update against a live database and reported the rows it
+ * had changed. Both faces now go through PhpMyAdminClient.query, which calls this.
+ *
+ * @param sql One or more statements.
+ * @returns   The offending statement, carrying its 1-indexed position, or null.
+ */
+export function firstWritingStatement(sql: string): Statement | null {
+  return splitStatements(sql).find((s) => !isReadOnly(s.sql)) ?? null;
+}
+
 /** A short single-line label for progress output and audit entries. */
 export function summarise(sql: string, max = 60): string {
   const flat = sql.replace(/\s+/g, " ").trim();

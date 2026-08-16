@@ -27,7 +27,13 @@
 
 import * as cheerio from "cheerio";
 import type { PmaConfig } from "./config.js";
-import { splitStatements, summarise, usesTransactionControl, type Statement } from "./sql.js";
+import {
+  firstWritingStatement,
+  splitStatements,
+  summarise,
+  usesTransactionControl,
+  type Statement,
+} from "./sql.js";
 
 /** The outcome of one statement. */
 export interface StatementResult {
@@ -69,6 +75,32 @@ export class PhpMyAdminClient {
   private readonly cookies = new Map<string, string>();
 
   constructor(private readonly cfg: PmaConfig) {}
+
+  /**
+   * Run SQL that must not change anything.
+   *
+   * The refusal lives here rather than in each caller. Both faces need it, and a rule that
+   * every entry point re-implements is a rule that lasts until somebody adds an entry point:
+   * the MCP tool checked and the CLI command did not, so `db:query "UPDATE ..."` ran the
+   * update against a live database and cheerfully reported the rows it had changed. A caller
+   * cannot forget a check that is the method it called.
+   *
+   * @param sql     One or more statements, all of which must be read-only.
+   * @param maxRows Values to return per statement.
+   * @returns       One result per statement, in file order.
+   * @throws Error  naming the first statement that would write, before anything is sent.
+   */
+  async query(sql: string, maxRows = 200): Promise<StatementResult[]> {
+    const writing = firstWritingStatement(sql);
+    if (writing) {
+      throw new Error(
+        `This is a read-only query, and statement ${writing.index} is not: ` +
+          `${summarise(writing.sql)}. Nothing was sent. Use db_execute (or the ` +
+          "db:execute command) if you mean to change data.",
+      );
+    }
+    return this.execute(sql, maxRows);
+  }
 
   /**
    * Execute SQL, one statement per request.
@@ -193,15 +225,25 @@ export class PhpMyAdminClient {
     }
     if (body) headers["content-type"] = "application/x-www-form-urlencoded";
 
-    const res = await fetch(buildUrl(this.cfg.url, pathname, this.cfg.domain), {
-      method: body ? "POST" : "GET",
-      body,
-      headers,
-      // Redirects are followed by default, and phpMyAdmin redirects after login. The
-      // cookies set on the intermediate response are applied by the runtime, but this
-      // client only sees the final one, so absorbing again below is not redundant.
-      signal: AbortSignal.timeout(this.cfg.timeoutMs),
-    });
+    const url = buildUrl(this.cfg.url, pathname, this.cfg.domain);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: body ? "POST" : "GET",
+        body,
+        headers,
+        // Redirects are followed by default, and phpMyAdmin redirects after login. The
+        // cookies set on the intermediate response are applied by the runtime, but this
+        // client only sees the final one, so absorbing again below is not redundant.
+        signal: AbortSignal.timeout(this.cfg.timeoutMs),
+      });
+    } catch (err) {
+      // `fetch` reports every transport failure as the same three words and hides the
+      // reason on `cause`. Unwrapping it here is the difference between "fetch failed"
+      // and knowing the certificate chain is incomplete.
+      throw new Error(describeFetchFailure(err, this.cfg.url));
+    }
 
     this.absorbCookies(res);
     return res.text();
@@ -313,6 +355,56 @@ export function loginForm(cfg: PmaConfig): URLSearchParams {
   }
 
   return form;
+}
+
+/**
+ * Turn a fetch rejection into something worth reading.
+ *
+ * `fetch` throws `TypeError: fetch failed` for a DNS miss, a refused connection, a timeout
+ * and a bad certificate alike, putting the actual reason on `cause`. Reporting the outer
+ * message alone sends the reader looking at their password when the problem is TLS.
+ *
+ * Exported for testing.
+ *
+ * @param err Whatever fetch rejected with.
+ * @param url The configured base URL, for a message that names the host.
+ */
+export function describeFetchFailure(err: unknown, url: string): string {
+  const cause = (err as { cause?: { code?: string; message?: string } })?.cause;
+  const code = cause?.code ?? "";
+  const detail = cause?.message ?? (err instanceof Error ? err.message : String(err));
+
+  // An incomplete chain is the one worth naming outright: the certificate is valid and the
+  // root is trusted, but the server omitted the intermediate that joins them, so nothing
+  // about the site looks wrong from a browser.
+  if (code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" || code === "SELF_SIGNED_CERT_IN_CHAIN") {
+    return (
+      `Could not verify the TLS certificate of ${url}: ${code}. The server is most likely ` +
+      "sending its leaf certificate without the intermediate that links it to a trusted " +
+      "root. Fetch the issuer named in the certificate's Authority Information Access " +
+      "extension and point NODE_EXTRA_CA_CERTS at it before starting. Do that rather than " +
+      "disabling verification: the chain still gets checked, and the database password " +
+      "goes over this connection. See docs/phpmyadmin.md."
+    );
+  }
+
+  if (code === "CERT_HAS_EXPIRED") {
+    return `The TLS certificate of ${url} has expired. This is the host's to fix, not yours.`;
+  }
+
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+    return `Could not resolve ${url}. Check CDMON_PMA_URL and this machine's DNS.`;
+  }
+
+  if (code === "ECONNREFUSED") {
+    return `Connection refused by ${url}. Check CDMON_PMA_URL, including its port and scheme.`;
+  }
+
+  if (err instanceof Error && err.name === "TimeoutError") {
+    return `${url} did not answer in time. Raise CDMON_PMA_TIMEOUT_MS if the host is simply slow.`;
+  }
+
+  return `Request to ${url} failed: ${code ? `${code}: ` : ""}${detail}`;
 }
 
 /** Some versions only surface the rotated token inside a script block. */

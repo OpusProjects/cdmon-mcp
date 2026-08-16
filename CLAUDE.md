@@ -39,12 +39,34 @@ a restore does.
 protocol error naming nothing useful. `requireAllOrNone` refuses a partly specified half. Keep
 it that way, and keep empty strings treated as absent.
 
+## Two faces, one set of rules
+
+`src/index.ts` (MCP) and `src/cli.ts` (CLI) are separate entry points over the same core, and
+that is where guarantees go to die. A safety rule each face implements for itself holds only
+until somebody adds a face and forgets.
+
+It already happened: `db_query` checked that the SQL was read-only, `db:query` did not, and
+`cdmon db:query "UPDATE news SET title='x'"` rewrote 32 rows of a live production table and
+reported the count as if that were a normal result. Recovering it took a backup, the activity
+log and a hand-built restore.
+
+So: **a rule that both faces need lives in the core, as the method they call.** `query()`
+refuses writes; `execute()` allows them. A caller cannot forget a check that *is* the method.
+Never re-implement a guard in a face, and never let one face call the permissive primitive
+where the other calls the guarded one.
+
+Related trap, same file: **never call `process.exit()` in the CLI.** Writes to a piped stdout
+are asynchronous, so exiting discards whatever has not flushed — output past the 64KB pipe
+buffer vanished and a half-read file looked complete. Set `process.exitCode` and let the
+process end on its own.
+
 ## Invariants
 
 Do not weaken these without saying so explicitly:
 
 - **Two gates on every write.** `CDMON_ALLOW_WRITES` must be set *and* `dryRun` must be false.
   A new writing tool that has only one of them is a bug.
+- **`db_query` / `db:query` are read-only, enforced in the core.** See above.
 - **Reads are always available.** Read-only mode is useful only if it is genuinely usable.
 - **One statement per phpMyAdmin request.** A multi-statement request returns a single summary,
   so a half-applied file reports success. Slower is correct here.
@@ -76,6 +98,10 @@ It is a scraped web session, because cdmon exposes no database API. Four traps:
   result, so posting a statement there runs nothing and returns a page with no error on it —
   a no-op reported as success. This was a real bug, found by comparing against a working
   shell script rather than by any test.
+- **cdmon serves phpMyAdmin without the intermediate certificate**, so Node cannot build the
+  chain and every request fails before it is sent. The fix is `NODE_EXTRA_CA_CERTS` pointing at
+  the missing intermediate, never a flag that skips verification — the database password
+  crosses that connection. Do not add such a flag, however often it is asked for.
 - **cdmon's phpMyAdmin is shared between all its customers**, so `CDMON_PMA_DOMAIN` selects
   which database server you reach. It must go on *every* request as `d`, not only the login,
   and on the login form as `pma_domain`. Without it the login returns the domain picker, which

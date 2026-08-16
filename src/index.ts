@@ -19,7 +19,7 @@ import { loadConfig } from "./config.js";
 import { FtpClient } from "./ftp.js";
 import { PhpMyAdminClient } from "./phpmyadmin.js";
 import { AuditLog } from "./audit.js";
-import { isReadOnly, splitStatements, summarise } from "./sql.js";
+import { splitStatements, summarise } from "./sql.js";
 
 const config = loadConfig();
 const audit = new AuditLog(config.auditLog);
@@ -132,15 +132,9 @@ if (pma) {
       },
     },
     async ({ sql, maxRows }) => {
-      const statements = splitStatements(sql);
-      const writing = statements.filter((s) => !isReadOnly(s.sql));
-      if (writing.length > 0) {
-        throw new Error(
-          `db_query is read-only; statement ${writing[0]?.index} is not: ` +
-            `${summarise(writing[0]?.sql ?? "")}. Use db_execute.`,
-        );
-      }
-      const results = await pma.execute(sql, maxRows);
+      // query(), not execute(): the refusal lives in the method, so this face and the CLI
+      // enforce it identically and neither can drift from the other.
+      const results = await pma.query(sql, maxRows);
       return text(formatResults(results));
     },
   );

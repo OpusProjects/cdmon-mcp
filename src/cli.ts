@@ -102,7 +102,9 @@ async function main(argv: string[]): Promise<number> {
 
     case "db:query": {
       const sql = required(rest.join(" "), "a SQL statement");
-      const results = await need(pma, "phpMyAdmin").execute(sql);
+      // query(), never execute(): the read-only refusal is the method, so this command
+      // cannot run a statement that writes even if nobody remembers to check here.
+      const results = await need(pma, "phpMyAdmin").query(sql);
       printResults(results);
       return 0;
     }
@@ -166,11 +168,19 @@ function required(value: string | undefined, what: string): string {
   return value;
 }
 
+// Set the exit code rather than calling process.exit(). When stdout is a pipe rather than a
+// terminal, writes to it are asynchronous, and process.exit() discards whatever has not
+// flushed yet - so `cdmon files:read big.sql | grep ...` silently lost everything past the
+// 64KB pipe buffer and looked like a complete file. Letting the process end on its own drains
+// the stream first. This is why a truncated read reported no error: nothing had gone wrong at
+// the FTP layer at all.
 main(process.argv.slice(2))
-  .then((code) => process.exit(code))
+  .then((code) => {
+    process.exitCode = code;
+  })
   .catch((err: unknown) => {
     // A failed statement already carries which one and how many applied; printing the
     // stack on top of that buries the part the operator needs.
     process.stderr.write(err instanceof StatementError ? `${err.message}\n` : `${String(err)}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   });

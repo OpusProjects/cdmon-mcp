@@ -5,6 +5,7 @@ How the database half works, and exactly which parts of somebody else's web inte
 ## Table of contents
 
 - [Why a web session](#why-a-web-session)
+- [The incomplete certificate chain](#the-incomplete-certificate-chain)
 - [The domain selector](#the-domain-selector)
 - [The login sequence](#the-login-sequence)
 - [The token rotates](#the-token-rotates)
@@ -23,6 +24,37 @@ cdmon exposes no database API, and shared hosting does not allow a direct MySQL 
 What a customer *does* have is phpMyAdmin in a browser. So this drives that: log in, post a
 query, read the result out of the page. It works, and it is the fragile half of the project —
 everything here depends on markup nobody promised to keep stable, which is why this file exists.
+
+---
+
+## The incomplete certificate chain
+
+cdmon's phpMyAdmin serves its leaf certificate without the intermediate that links it to a
+trusted root, so Node refuses the connection and every request fails before it is sent.
+
+The certificate itself is valid, which is what makes this confusing: a browser shows the site
+as secure, because browsers cache intermediates they have seen elsewhere and fetch missing ones
+on their own. Node does neither. The failure surfaces as `UNABLE_TO_VERIFY_LEAF_SIGNATURE`.
+
+Fix it by supplying the missing certificate rather than by turning verification off:
+
+```bash
+# The URL comes from the certificate's own Authority Information Access extension:
+openssl s_client -connect <host>:443 -servername <host> </dev/null 2>/dev/null \
+  | openssl x509 -noout -text | grep -A1 "Authority Information Access"
+
+curl -sS http://crt.example/TheIssuer.crt | openssl x509 -inform DER -out ~/.config/cdmon-mcp/intermediate.pem
+export NODE_EXTRA_CA_CERTS=~/.config/cdmon-mcp/intermediate.pem
+```
+
+`NODE_EXTRA_CA_CERTS` is read once at startup, so it must be set **before** node runs — in the
+`env` block of an MCP client, or exported before the CLI is invoked. It adds to the trust store
+rather than replacing it, and the chain is still checked in full.
+
+There is no setting in this project to skip verification, deliberately. The database password
+crosses that connection on every request, and an unverified TLS session offers no protection
+against anyone in the path. `curl -k` in a personal script is one thing; a published tool that
+makes it a config flag is another.
 
 ---
 

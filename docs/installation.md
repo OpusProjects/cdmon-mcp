@@ -119,6 +119,11 @@ Booleans accept `1`, `true`, `yes` and `on`; anything else is false.
 shared hosting an FTP account often has reach above the document root — sometimes into another
 site entirely.
 
+On cdmon you will also need `NODE_EXTRA_CA_CERTS`, because their phpMyAdmin sends an incomplete
+certificate chain that Node refuses. It is a standard Node variable rather than one of this
+project's, and [phpmyadmin.md](phpmyadmin.md#the-incomplete-certificate-chain) explains how to
+produce the file it points at.
+
 `CDMON_PMA_DOMAIN` is required on cdmon and absent on a stock install. cdmon runs one
 phpMyAdmin for every customer and resolves which database server you reach from that value.
 Leaving it out does not produce a useful error: the login returns the domain picker, the picker
