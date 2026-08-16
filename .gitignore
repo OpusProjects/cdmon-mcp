@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+
+# Real credentials. .env.example carries the placeholders instead.
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store

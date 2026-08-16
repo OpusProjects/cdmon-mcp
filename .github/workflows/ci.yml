@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        # ci, not install: the lockfile is committed, and install is free to resolve
+        # something else and leave the run testing a version nobody chose.
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        # The suite needs no credentials and no live account. Anything that would
+        # require one runs against the containers in tests/testserver instead.
+        run: npm test
+
+  hygiene:
+    name: Hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No .env file is tracked
+        run: |
+          # Matches .env and anything beside it, but not the committed example.
+          if git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -vE '\.env\.example$'; then
+            echo "::error::A .env file is tracked. Remove it and rotate the credentials inside it."
+            exit 1
+          fi
+          echo "No tracked .env files."
+
+      - name: .env.example holds no real secrets
+        run: |
+          if grep -nE "=[[:space:]]*'?[0-9a-fA-F]{32,}'?[[:space:]]*$" .env.example; then
+            echo "::error file=.env.example::A value looks like a real secret. Use a placeholder."
+            exit 1
+          fi
+          echo ".env.example present with placeholder values only."
+
+      - name: No real hostnames committed
+        run: |
+          # The FTP host and phpMyAdmin URL of a real site should never reach the repo.
+          if git grep -nE '\.cdmon\.(com|net)' -- ':!docs' ':!README.md' ':!.github'; then
+            echo "::error::A cdmon hostname appears outside documentation."
+            exit 1
+          fi
+          echo "No hostnames outside documentation."

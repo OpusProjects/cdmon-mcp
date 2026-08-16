@@ -1,0 +1,59 @@
+{
+  "name": "cdmon-mcp",
+  "version": "0.1.0",
+  "description": "Unofficial MCP server and CLI for deploying files and running SQL on cdmon hosting",
+  "license": "Apache-2.0",
+  "author": "Blai Peidro",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "cdmon-mcp": "dist/index.js",
+    "cdmon": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpusProjects/cdmon-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OpusProjects/cdmon-mcp/issues"
+  },
+  "homepage": "https://github.com/OpusProjects/cdmon-mcp#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cdmon",
+    "shared-hosting",
+    "ftp",
+    "phpmyadmin",
+    "deployment"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "testserver:up": "docker compose -f tests/testserver/docker-compose.yml up -d --wait",
+    "testserver:down": "docker compose -f tests/testserver/docker-compose.yml down -v",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "basic-ftp": "^5.0.5",
+    "cheerio": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

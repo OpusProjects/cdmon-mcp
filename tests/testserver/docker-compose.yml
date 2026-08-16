@@ -1,0 +1,72 @@
+# A local stand-in for cdmon hosting: an FTP server, a database and phpMyAdmin.
+#
+# The unit tests need none of this - they run in milliseconds with no network. This is for
+# the parts that cannot be asserted without a real server on the other end: whether a login
+# actually succeeds, whether the token really rotates, whether a listing parses.
+#
+# It is never started by CI. Bringing it up is a deliberate act:
+#
+#   npm run testserver:up
+#   npm run testserver:down
+#
+# Nothing here is hardened, and nothing here should be reachable from anywhere but the
+# machine it runs on. The credentials are fixed so a developer never has to invent any.
+
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: testserver
+      MARIADB_DATABASE: cdmon_test
+      MARIADB_USER: cdmon
+      MARIADB_PASSWORD: testserver
+    ports:
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/index.php"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ftp:
+    image: delfer/alpine-ftp-server:latest
+    environment:
+      USERS: "cdmon|testserver|/home/cdmon/site"
+      ADDRESS: 127.0.0.1
+      MIN_PORT: 21000
+      MAX_PORT: 21010
+    ports:
+      - "127.0.0.1:2121:21"
+      - "127.0.0.1:21000-21010:21000-21010"
+
+# Point the client at the stack with:
+#
+#   CDMON_FTP_HOST=127.0.0.1
+#   CDMON_FTP_USER=cdmon
+#   CDMON_FTP_PASS=testserver
+#   CDMON_FTP_ROOT=/site
+#   CDMON_FTP_DELAY_MS=0
+#   CDMON_PMA_URL=http://127.0.0.1:8081
+#   CDMON_PMA_USER=cdmon
+#   CDMON_PMA_PASS=testserver
+#   CDMON_PMA_DB=cdmon_test
+#
+# CDMON_FTP_DELAY_MS=0 is safe here and only here: the pause exists because cdmon blocks an
+# address that connects too quickly, and this container does not.
