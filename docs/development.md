@@ -98,7 +98,7 @@ Two jobs run on every push and pull request.
 
 | Job | What it checks |
 |---|---|
-| `test` | `npm ci`, typecheck, and the full suite on Node 22 |
+| `test` | `npm ci`, typecheck, and the full suite on the active Node LTS |
 | `hygiene` | No tracked `.env`, no real secret in `.env.example`, no real hostname outside docs |
 
 `test` is the required check for merging. The hygiene job exists because the failure it catches
