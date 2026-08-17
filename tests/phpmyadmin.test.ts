@@ -7,7 +7,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildUrl, describeFetchFailure, loginForm, PhpMyAdminClient } from "../src/phpmyadmin.js";
+import {
+  buildUrl,
+  describeFetchFailure,
+  loginForm,
+  PhpMyAdminClient,
+  tidyServerError,
+} from "../src/phpmyadmin.js";
 import { firstWritingStatement } from "../src/sql.js";
 import type { PmaConfig } from "../src/config.js";
 
@@ -127,6 +133,32 @@ describe("firstWritingStatement", () => {
     const found = firstWritingStatement("SELECT 1; UPDATE t SET a=1; DELETE FROM t;");
     expect(found?.index).toBe(2);
     expect(found?.sql).toContain("UPDATE");
+  });
+});
+
+describe("tidyServerError", () => {
+  it("keeps only what MySQL said", () => {
+    // The real shape, scraped from a live phpMyAdmin: a heading, the echoed query, and the
+    // label of a Copy button, all ahead of the one clause that explains the failure.
+    const scraped =
+      "ErrorSQL query: Copy ALTER TABLE `cdmon_probe` ADD COLUMN `note` text; " +
+      "MySQL said: #1060 - Duplicate column name 'note'.";
+    expect(tidyServerError(scraped)).toBe("#1060 - Duplicate column name 'note'.");
+  });
+
+  it("copes with the marker spanning lines", () => {
+    expect(tidyServerError("Error\nSQL query:\nSELECT 1\nMySQL said:\n#1064 - syntax")).toBe(
+      "#1064 - syntax",
+    );
+  });
+
+  it("strips the chrome when there is no marker at all", () => {
+    // Not every refusal reaches MySQL, and returning nothing would be worse than untidy.
+    expect(tidyServerError("ErrorSQL query: Copy DROP DATABASE x")).toBe("DROP DATABASE x");
+  });
+
+  it("leaves an already-clean message alone", () => {
+    expect(tidyServerError("Access denied for user")).toBe("Access denied for user");
   });
 });
 

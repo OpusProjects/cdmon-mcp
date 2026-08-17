@@ -271,9 +271,35 @@ function readError($: cheerio.CheerioAPI): string | null {
   for (const selector of candidates) {
     const text = $(selector).first().text().replace(/\s+/g, " ").trim();
     // "Javascript must be enabled" is a standing notice on the page, not a query error.
-    if (text && !/javascript must be enabled/i.test(text)) return text;
+    if (text && !/javascript must be enabled/i.test(text)) return tidyServerError(text);
   }
   return null;
+}
+
+/**
+ * Reduce a scraped error block to the part the server actually said.
+ *
+ * The block is laid out for a browser, so its text includes a heading, the echoed query and
+ * the label of a "Copy" button. Read as a string it comes out as
+ * `ErrorSQL query: Copy ALTER TABLE ... MySQL said: #1060 - Duplicate column name 'note'.` -
+ * which buries the one clause that matters behind interface furniture.
+ *
+ * Exported for testing.
+ *
+ * @param text Flattened text of the error element.
+ * @returns    What MySQL said, if that can be isolated; otherwise the input unchanged.
+ */
+export function tidyServerError(text: string): string {
+  const said = /MySQL said:\s*(.+)$/is.exec(text);
+  if (said?.[1]) return said[1].trim();
+
+  // Some refusals never reach MySQL and so carry no such marker. Strip the chrome that
+  // wraps them and keep the rest rather than returning nothing.
+  return text
+    .replace(/^Error\s*/i, "")
+    .replace(/^SQL query:\s*/i, "")
+    .replace(/^Copy\s*/i, "")
+    .trim();
 }
 
 /** Rows affected by an INSERT, UPDATE, DELETE or DDL statement. */
