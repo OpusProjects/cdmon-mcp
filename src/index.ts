@@ -28,12 +28,19 @@ const pma = config.pma ? new PhpMyAdminClient(config.pma) : null;
 
 const server = new McpServer({ name: "cdmon-mcp", version: "0.1.0" });
 
-/** Refuse a write when the operator has not opted in. */
+/**
+ * Refuse a write when the operator has not opted in.
+ *
+ * Called only once a tool is about to act for real. A dry run changes nothing, and letting it
+ * run read-only is what allows an agent to say what it *would* do before anyone decides
+ * whether to enable writing at all. The CLI gates its own `--apply` at the same point.
+ */
 function requireWrites(): void {
   if (!config.allowWrites) {
     throw new Error(
       "Writes are disabled. Set CDMON_ALLOW_WRITES=1 to enable uploads, deletes and " +
-        "data-changing SQL. This server starts read-only on purpose.",
+        "data-changing SQL. This server starts read-only on purpose. Calling this tool " +
+        "with dryRun true reports what would happen and needs no permission.",
     );
   }
 }
@@ -82,11 +89,11 @@ if (ftp) {
       },
     },
     async ({ path, content, dryRun }) => {
-      requireWrites();
       if (dryRun) {
         await audit.record("files_upload", { path, bytes: content.length }, "dry-run");
         return text(`[dry run] would upload ${content.length} bytes to ${path}`);
       }
+      requireWrites();
       const result = await ftp.upload(path, content);
       await audit.record("files_upload", result);
       return text(`Uploaded ${result.bytes} bytes to ${result.path}`);
@@ -105,11 +112,11 @@ if (ftp) {
       },
     },
     async ({ path, dryRun }) => {
-      requireWrites();
       if (dryRun) {
         await audit.record("files_delete", { path }, "dry-run");
         return text(`[dry run] would delete ${path}`);
       }
+      requireWrites();
       const result = await ftp.remove(path);
       await audit.record("files_delete", result);
       return text(`Deleted ${result.path}`);
@@ -152,7 +159,6 @@ if (pma) {
       },
     },
     async ({ sql, dryRun, maxRows }) => {
-      requireWrites();
       const statements = splitStatements(sql);
 
       if (dryRun) {
@@ -160,6 +166,7 @@ if (pma) {
         const listing = statements.map((s) => `  [${s.index}] ${summarise(s.sql, 80)}`).join("\n");
         return text(`[dry run] ${statements.length} statement(s) would run:\n${listing}`);
       }
+      requireWrites();
 
       try {
         const results = await pma.execute(sql, maxRows);

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { isInside, PathError, resolveInsideRoot } from "../src/ftp.js";
+import { describeFtpFailure, isInside, PathError, resolveInsideRoot } from "../src/ftp.js";
 
 const ROOT = "/site/web";
 
@@ -62,6 +62,45 @@ describe("resolveInsideRoot", () => {
 
   it("tolerates a trailing slash on the root", () => {
     expect(resolveInsideRoot("/site/web/", "a.txt")).toBe("/site/web/a.txt");
+  });
+});
+
+describe("describeFtpFailure", () => {
+  const PATH = "/site/web/missing.txt";
+
+  it("translates a dropped data connection into the likely cause", () => {
+    // What a missing file actually produces on this host. "read ECONNRESET (data socket)"
+    // is a message about sockets for a problem about a filename.
+    const text = describeFtpFailure(new Error("read ECONNRESET (data socket)"), PATH);
+    expect(text).toContain(PATH);
+    expect(text).toMatch(/does not exist/i);
+  });
+
+  it("translates 550, from the message or the code", () => {
+    expect(describeFtpFailure(new Error("550 Failed to open file."), PATH)).toMatch(/no such file/i);
+    expect(describeFtpFailure(Object.assign(new Error("nope"), { code: 550 }), PATH)).toMatch(
+      /no such file/i,
+    );
+  });
+
+  it("points a login refusal at the credentials", () => {
+    expect(describeFtpFailure(new Error("530 Login incorrect."), PATH)).toMatch(/CDMON_FTP_PASS/);
+  });
+
+  it("mentions the ban risk on a timeout, since that is the usual cause here", () => {
+    const text = describeFtpFailure(new Error("Timeout (control socket)"), PATH);
+    expect(text).toMatch(/blocked for connecting too often/i);
+  });
+
+  it("distinguishes host problems from path problems", () => {
+    expect(describeFtpFailure(new Error("getaddrinfo ENOTFOUND h"), PATH)).toMatch(/CDMON_FTP_HOST/);
+    expect(describeFtpFailure(new Error("connect ECONNREFUSED"), PATH)).toMatch(/refused/i);
+  });
+
+  it("keeps the original message when it recognises nothing", () => {
+    const text = describeFtpFailure(new Error("something unusual"), PATH);
+    expect(text).toContain("something unusual");
+    expect(text).toContain(PATH);
   });
 });
 

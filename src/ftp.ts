@@ -134,7 +134,7 @@ export class FtpClient {
     return this.withClient(async (client) => {
       const entries = await client.list(target);
       return entries.map(toRemoteEntry);
-    });
+    }, target);
   }
 
   /** Read a remote file as text. Intended for small files: config, templates, logs. */
@@ -155,7 +155,7 @@ export class FtpClient {
       });
       await client.downloadTo(sink, target);
       return Buffer.concat(chunks).toString("utf8");
-    });
+    }, target);
   }
 
   /** Upload text content, creating parent directories as needed. */
@@ -167,7 +167,7 @@ export class FtpClient {
       const bytes = Buffer.byteLength(content, "utf8");
       await client.uploadFrom(Readable.from([content]), target);
       return { path: target, bytes };
-    });
+    }, target);
   }
 
   /** Delete a remote file. */
@@ -176,7 +176,7 @@ export class FtpClient {
     return this.withClient(async (client) => {
       await client.remove(target);
       return { path: target };
-    });
+    }, target);
   }
 
   /**
@@ -187,7 +187,7 @@ export class FtpClient {
    * anyway, producing errors that look like failures of the operation rather than of the
    * connection.
    */
-  private withClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+  private withClient<T>(fn: (client: Client) => Promise<T>, target = "the path"): Promise<T> {
     const run = this.queue.then(async () => {
       const client = new Client(this.cfg.timeoutMs);
       client.ftp.verbose = false;
@@ -199,6 +199,8 @@ export class FtpClient {
           secure: this.cfg.secure,
         });
         return await fn(client);
+      } catch (err) {
+        throw new Error(describeFtpFailure(err, target));
       } finally {
         client.close();
       }
@@ -212,6 +214,59 @@ export class FtpClient {
 
     return run;
   }
+}
+
+/**
+ * Turn an FTP failure into something that names the path and the likely cause.
+ *
+ * The protocol's own errors are unhelpful in a specific way: asking for a file that is not
+ * there does not reliably produce "550 not found". Some servers drop the data connection
+ * instead, which surfaces as `read ECONNRESET (data socket)` - a message about sockets, for
+ * a problem about a filename.
+ *
+ * Exported for testing.
+ *
+ * @param err    Whatever the FTP client threw.
+ * @param target Resolved remote path the operation was working on.
+ */
+export function describeFtpFailure(err: unknown, target: string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: number | string })?.code;
+
+  // 550 is the catch-all refusal: absent, not a file, or not permitted.
+  if (code === 550 || /\b550\b/.test(message)) {
+    return `${target}: no such file or directory, or permission denied (FTP 550).`;
+  }
+
+  // A dropped data connection almost always means the transfer never started, and the
+  // usual reason for that is a path the server could not open.
+  if (/ECONNRESET.*data socket|data socket.*ECONNRESET/i.test(message)) {
+    return (
+      `${target}: the server closed the data connection without sending anything. The ` +
+      "usual cause is that the path does not exist; list its directory to check."
+    );
+  }
+
+  if (code === 530 || /\b530\b/.test(message)) {
+    return "FTP login was refused (530). Check CDMON_FTP_USER and CDMON_FTP_PASS.";
+  }
+
+  if (/ENOTFOUND|EAI_AGAIN/.test(message)) {
+    return "Could not resolve the FTP host. Check CDMON_FTP_HOST.";
+  }
+
+  if (/ECONNREFUSED/.test(message)) {
+    return "The FTP host refused the connection. Check CDMON_FTP_HOST and that FTP is enabled.";
+  }
+
+  if (/Timeout|ETIMEDOUT/i.test(message)) {
+    return (
+      `${target}: the FTP server did not respond in time. Raise CDMON_FTP_TIMEOUT_MS, or ` +
+      "check whether this address has been blocked for connecting too often."
+    );
+  }
+
+  return `${target}: ${message}`;
 }
 
 function toRemoteEntry(info: FileInfo): RemoteEntry {

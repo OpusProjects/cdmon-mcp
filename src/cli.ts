@@ -14,6 +14,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import { FtpClient } from "./ftp.js";
 import { PhpMyAdminClient, StatementError } from "./phpmyadmin.js";
@@ -27,16 +28,18 @@ Usage:
   cdmon files:read <path>
   cdmon files:upload <local> <remote> [--apply]
   cdmon files:delete <remote> [--apply]
-  cdmon db:query <sql>
-  cdmon db:execute <file.sql> [--apply]
+  cdmon db:query <sql> [--max-rows N]
+  cdmon db:execute <file.sql> [--apply] [--max-rows N]
 
-Writes are a dry run unless --apply is given, and require CDMON_ALLOW_WRITES=1.
+Writes are a dry run unless --apply is given. Applying requires CDMON_ALLOW_WRITES=1;
+a dry run does not, so a migration can be previewed from a read-only session.
+
+--max-rows defaults to 200. A capped result says how many it held back.
 Configuration comes from the environment; see .env.example.
 `;
 
 async function main(argv: string[]): Promise<number> {
-  const args = argv.filter((a) => a !== "--apply");
-  const apply = argv.includes("--apply");
+  const { rest: args, apply, maxRows } = parseFlags(argv);
   const [command, ...rest] = args;
 
   if (!command || command === "--help" || command === "-h") {
@@ -49,9 +52,15 @@ async function main(argv: string[]): Promise<number> {
   const ftp = config.ftp ? new FtpClient(config.ftp) : null;
   const pma = config.pma ? new PhpMyAdminClient(config.pma) : null;
 
+  // Only an --apply calls this. A dry run changes nothing, and refusing to preview a
+  // migration until writes are switched on is backwards: previewing is how you decide
+  // whether to switch them on.
   const needWrites = () => {
     if (!config.allowWrites) {
-      throw new Error("Writes are disabled. Set CDMON_ALLOW_WRITES=1.");
+      throw new Error(
+        "Writes are disabled. Set CDMON_ALLOW_WRITES=1 to apply. Without --apply this " +
+          "would have run as a dry run, which needs no permission.",
+      );
     }
   };
 
@@ -75,12 +84,15 @@ async function main(argv: string[]): Promise<number> {
     case "files:upload": {
       const local = required(rest[0], "a local file");
       const remote = required(rest[1], "a remote path");
-      needWrites();
       const content = await readFile(local, "utf8");
       if (!apply) {
+        // Recorded, like the MCP face records its dry runs. An intention that was formed
+        // and then not carried out is part of the story the log tells.
+        await audit.record("files:upload", { path: remote, bytes: content.length }, "dry-run");
         process.stdout.write(`[dry run] would upload ${content.length} bytes to ${remote}\n`);
         return 0;
       }
+      needWrites();
       const result = await need(ftp, "FTP").upload(remote, content);
       await audit.record("files:upload", result);
       process.stdout.write(`Uploaded ${result.bytes} bytes to ${result.path}\n`);
@@ -89,11 +101,12 @@ async function main(argv: string[]): Promise<number> {
 
     case "files:delete": {
       const remote = required(rest[0], "a remote path");
-      needWrites();
       if (!apply) {
+        await audit.record("files:delete", { path: remote }, "dry-run");
         process.stdout.write(`[dry run] would delete ${remote}\n`);
         return 0;
       }
+      needWrites();
       const result = await need(ftp, "FTP").remove(remote);
       await audit.record("files:delete", result);
       process.stdout.write(`Deleted ${result.path}\n`);
@@ -104,7 +117,7 @@ async function main(argv: string[]): Promise<number> {
       const sql = required(rest.join(" "), "a SQL statement");
       // query(), never execute(): the read-only refusal is the method, so this command
       // cannot run a statement that writes even if nobody remembers to check here.
-      const results = await need(pma, "phpMyAdmin").query(sql);
+      const results = await need(pma, "phpMyAdmin").query(sql, maxRows);
       printResults(results);
       return 0;
     }
@@ -112,17 +125,18 @@ async function main(argv: string[]): Promise<number> {
     case "db:execute": {
       const file = required(rest[0], "a .sql file");
       const sql = await readFile(file, "utf8");
-      needWrites();
 
       const statements = splitStatements(sql);
       if (!apply) {
+        await audit.record("db:execute", { file, statements: statements.length }, "dry-run");
         process.stdout.write(`[dry run] ${statements.length} statement(s) would run:\n`);
         for (const s of statements) process.stdout.write(`  [${s.index}] ${summarise(s.sql, 80)}\n`);
         return 0;
       }
+      needWrites();
 
       try {
-        const results = await need(pma, "phpMyAdmin").execute(sql);
+        const results = await need(pma, "phpMyAdmin").execute(sql, maxRows);
         await audit.record("db:execute", { file, statements: results.length });
         printResults(results);
         return 0;
@@ -156,6 +170,44 @@ function printResults(results: Awaited<ReturnType<PhpMyAdminClient["execute"]>>)
   }
 }
 
+/**
+ * Separate flags from positional arguments.
+ *
+ * Exported for testing. `--max-rows` exists because the truncation notice used to tell the
+ * reader to raise it while the CLI parsed only `--apply` - advice that could not be followed.
+ *
+ * @param argv Raw arguments, without the node and script entries.
+ * @throws Error if --max-rows is given without a usable number.
+ */
+export function parseFlags(argv: string[]): { rest: string[]; apply: boolean; maxRows: number } {
+  const rest: string[] = [];
+  let apply = false;
+  let maxRows = 200;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] as string;
+    if (arg === "--apply") {
+      apply = true;
+    } else if (arg === "--max-rows") {
+      const value = Number(argv[++i]);
+      if (!Number.isInteger(value) || value < 1) {
+        throw new Error("--max-rows needs a whole number of at least 1.");
+      }
+      maxRows = value;
+    } else if (arg.startsWith("--max-rows=")) {
+      const value = Number(arg.slice("--max-rows=".length));
+      if (!Number.isInteger(value) || value < 1) {
+        throw new Error("--max-rows needs a whole number of at least 1.");
+      }
+      maxRows = value;
+    } else {
+      rest.push(arg);
+    }
+  }
+
+  return { rest, apply, maxRows };
+}
+
 function need<T>(value: T | null, label: string): T {
   if (value === null) {
     throw new Error(`${label} is not configured. See .env.example.`);
@@ -168,19 +220,27 @@ function required(value: string | undefined, what: string): string {
   return value;
 }
 
-// Set the exit code rather than calling process.exit(). When stdout is a pipe rather than a
-// terminal, writes to it are asynchronous, and process.exit() discards whatever has not
-// flushed yet - so `cdmon files:read big.sql | grep ...` silently lost everything past the
-// 64KB pipe buffer and looked like a complete file. Letting the process end on its own drains
-// the stream first. This is why a truncated read reported no error: nothing had gone wrong at
-// the FTP layer at all.
-main(process.argv.slice(2))
-  .then((code) => {
-    process.exitCode = code;
-  })
-  .catch((err: unknown) => {
-    // A failed statement already carries which one and how many applied; printing the
-    // stack on top of that buries the part the operator needs.
-    process.stderr.write(err instanceof StatementError ? `${err.message}\n` : `${String(err)}\n`);
-    process.exitCode = 1;
-  });
+// Run only when invoked as a command, not when imported. Without this, importing anything
+// from here - as the tests do, to reach parseFlags - executes a command as a side effect of
+// the import, which at best prints usage and at worst acts on a live site.
+const invokedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  // Set the exit code rather than calling process.exit(). When stdout is a pipe rather than a
+  // terminal, writes to it are asynchronous, and process.exit() discards whatever has not
+  // flushed yet - so `cdmon files:read big.sql | grep ...` silently lost everything past the
+  // 64KB pipe buffer and looked like a complete file. Letting the process end on its own
+  // drains the stream first. That is why a truncated read reported no error: nothing had gone
+  // wrong at the FTP layer at all.
+  main(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((err: unknown) => {
+      // A failed statement already carries which one and how many applied; printing the
+      // stack on top of that buries the part the operator needs.
+      process.stderr.write(err instanceof StatementError ? `${err.message}\n` : `${String(err)}\n`);
+      process.exitCode = 1;
+    });
+}
