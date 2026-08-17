@@ -14,6 +14,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - MCP server exposing `files_list`, `files_read`, `files_upload` and `files_delete` over FTP.
 - MCP server exposing `db_query` for read-only SQL and `db_execute` for changes, through phpMyAdmin.
 - `cdmon` CLI over the same core, for CI jobs and scripts, where `--apply` opts into writing.
+- `--max-rows` on the CLI, matching the `maxRows` tool argument, defaulting to 200.
 - Write gate: uploads, deletes and data-changing SQL require `CDMON_ALLOW_WRITES`.
 - Dry run by default on every write, so an agent reports its intent before acting on it.
 - Path guard confining every FTP operation inside `CDMON_FTP_ROOT`.
