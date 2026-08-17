@@ -251,6 +251,16 @@ export function describeFtpFailure(err: unknown, target: string): string {
     return "FTP login was refused (530). Check CDMON_FTP_USER and CDMON_FTP_PASS.";
   }
 
+  // AUTH is the command that starts FTPS. A server that does not understand it does not
+  // offer FTPS at all, which is a fact about the plan rather than a fault to debug.
+  if (/AUTH not understood|\b534\b/i.test(message)) {
+    return (
+      "This FTP server does not support FTPS: it rejected the AUTH command. Unset " +
+      "CDMON_FTP_SECURE to connect in plain FTP, and be aware the password is then sent " +
+      "in the clear."
+    );
+  }
+
   if (/ENOTFOUND|EAI_AGAIN/.test(message)) {
     return "Could not resolve the FTP host. Check CDMON_FTP_HOST.";
   }

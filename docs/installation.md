@@ -107,7 +107,7 @@ Every setting is an environment variable, and [`.env.example`](../.env.example) 
 | `CDMON_FTP_ROOT` | `/` | Directory every file operation is confined to |
 | `CDMON_FTP_DELAY_MS` | `2000` | Pause after each FTP operation, successful or not |
 | `CDMON_FTP_TIMEOUT_MS` | `30000` | FTP timeout |
-| `CDMON_FTP_SECURE` | `0` | Use FTPS |
+| `CDMON_FTP_SECURE` | `0` | Use FTPS — not offered by cdmon's FTP server, see [safety](safety.md) |
 | `CDMON_PMA_URL` | — | phpMyAdmin base URL |
 | `CDMON_PMA_USER` | — | Database username |
 | `CDMON_PMA_PASS` | — | Database password |

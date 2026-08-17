@@ -128,9 +128,15 @@ The model driving the server sees tool names and arguments, not the environment 
 started with. It cannot read a password, cannot pass the wrong one, and cannot repeat one into a
 transcript that gets pasted into an issue later.
 
-Two limits are worth knowing. Plain FTP sends the password in the clear — set `CDMON_FTP_SECURE=1`
-if your plan accepts FTPS. And phpMyAdmin has no API, so the database password is posted to a
-login form; see [phpmyadmin.md](phpmyadmin.md).
+Two limits are worth knowing, and the first is not hypothetical.
+
+**Plain FTP sends the password in the clear.** `CDMON_FTP_SECURE=1` asks for FTPS, but cdmon's
+FTP server does not offer it — it answers the `AUTH` command with `500 AUTH not understood`, so
+there is nothing to turn on. The setting exists for hosts that do support it. On cdmon, treat
+the FTP password as travelling in the open, and prefer a network you trust.
+
+**phpMyAdmin has no API**, so the database password is posted to a login form. That connection
+at least is TLS, once the certificate chain is dealt with — see [phpmyadmin.md](phpmyadmin.md).
 
 ---
 

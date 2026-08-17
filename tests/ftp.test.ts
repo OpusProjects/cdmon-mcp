@@ -87,6 +87,13 @@ describe("describeFtpFailure", () => {
     expect(describeFtpFailure(new Error("530 Login incorrect."), PATH)).toMatch(/CDMON_FTP_PASS/);
   });
 
+  it("explains that a rejected AUTH means no FTPS, rather than a fault to chase", () => {
+    // What cdmon's server actually answers. Read literally it looks like a broken command.
+    const text = describeFtpFailure(new Error("500 AUTH not understood"), PATH);
+    expect(text).toMatch(/does not support FTPS/i);
+    expect(text).toMatch(/CDMON_FTP_SECURE/);
+  });
+
   it("mentions the ban risk on a timeout, since that is the usual cause here", () => {
     const text = describeFtpFailure(new Error("Timeout (control socket)"), PATH);
     expect(text).toMatch(/blocked for connecting too often/i);
