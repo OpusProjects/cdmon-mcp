@@ -150,8 +150,13 @@ Every tool has a command, over the same code, for jobs with no model in them.
 | `files_read` | `cdmon files:read <path>` |
 | `files_upload` | `cdmon files:upload <local> <remote> [--apply]` |
 | `files_delete` | `cdmon files:delete <remote> [--apply]` |
-| `db_query` | `cdmon db:query <sql>` |
-| `db_execute` | `cdmon db:execute <file.sql> [--apply]` |
+| `db_query` | `cdmon db:query <sql> [--max-rows N]` |
+| `db_execute` | `cdmon db:execute <file.sql> [--apply] [--max-rows N]` |
 
 The `dryRun` argument becomes `--apply`, inverted: both faces default to not writing, and both
-require the caller to say so a second time.
+require the caller to say so a second time. `maxRows` becomes `--max-rows`, with the same
+default of 200.
+
+A dry run needs no permission on either face. `CDMON_ALLOW_WRITES` is checked when an operation
+is about to act for real, not when it is asked what it would do — otherwise a migration could
+not be previewed from the read-only session where you are deciding whether to allow it.

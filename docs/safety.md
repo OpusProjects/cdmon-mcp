@@ -47,6 +47,10 @@ This costs one extra call and buys the thing that matters most: the plan is visi
 applied. An agent asked to "clean up the old templates" says which files it means, and a list of
 eleven when you expected two is a conversation rather than a restore.
 
+A dry run needs no permission. `CDMON_ALLOW_WRITES` is checked when an operation is about to act,
+not when it is asked what it would do, so a migration can be previewed from a read-only session —
+which is where you are standing when you decide whether to allow it at all.
+
 ---
 
 ## The path guard

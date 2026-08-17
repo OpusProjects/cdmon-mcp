@@ -87,7 +87,11 @@ cdmon db:execute ./sql/migration.sql --apply
 ```
 
 Writes are a dry run unless `--apply` is given, so a mistyped command reports what it would
-have done instead of doing it.
+have done instead of doing it. Only `--apply` needs `CDMON_ALLOW_WRITES`; a dry run does not,
+so a migration can be previewed before writing is enabled.
+
+`db:query` and `db:execute` also take `--max-rows N`, defaulting to 200. A capped result says
+how many rows it held back rather than looking complete.
 
 ---
 
