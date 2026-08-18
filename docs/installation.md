@@ -82,7 +82,9 @@ export $(grep -v '^#' .env | xargs)     # or set the variables however you prefe
 
 cdmon files:list web/css
 cdmon files:upload ./app/Config/App.php app/Config/App.php --apply
+cdmon files:download backup_db/latest.sql ./latest.sql
 cdmon db:query "SELECT COUNT(*) FROM users"
+cdmon db:dump ./backup.sql
 cdmon db:execute ./sql/migration.sql --apply
 ```
 

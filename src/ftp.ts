@@ -158,6 +158,34 @@ export class FtpClient {
     }, target);
   }
 
+  /**
+   * Download a remote file to a local path, byte for byte.
+   *
+   * `read` is for small text a caller wants in hand, and refuses anything over its cap so it
+   * never loads a large file into memory. This is the other case: a backup or an image, of
+   * any size, streamed straight to disk. Nothing is decoded, so binary survives intact, and
+   * there is no size limit because the bytes never accumulate in memory.
+   *
+   * @param remoteFile Path on the site, relative to the configured root.
+   * @param localPath  Where to write it. Its parent directory must already exist.
+   * @returns          The remote path, the local path, and the number of bytes written.
+   */
+  async download(
+    remoteFile: string,
+    localPath: string,
+  ): Promise<{ path: string; localPath: string; bytes: number }> {
+    const target = resolveInsideRoot(this.cfg.root, remoteFile);
+    return this.withClient(async (client) => {
+      // basic-ftp writes to a local path directly, managing the stream and closing it. On a
+      // failed transfer it also removes the partial file, so a broken download does not leave
+      // a truncated one looking whole.
+      await client.downloadTo(localPath, target);
+      const { stat } = await import("node:fs/promises");
+      const { size } = await stat(localPath);
+      return { path: target, localPath, bytes: size };
+    }, target);
+  }
+
   /** Upload text content, creating parent directories as needed. */
   async upload(remoteFile: string, content: string): Promise<{ path: string; bytes: number }> {
     const target = resolveInsideRoot(this.cfg.root, remoteFile);

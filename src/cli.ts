@@ -26,6 +26,7 @@ const USAGE = `cdmon - deploy files and run SQL on cdmon hosting
 Usage:
   cdmon files:list [path]
   cdmon files:read <path>
+  cdmon files:download <remote> <local>
   cdmon files:upload <local> <remote> [--apply]
   cdmon files:delete <remote> [--apply]
   cdmon db:query <sql> [--max-rows N]
@@ -79,6 +80,18 @@ async function main(argv: string[]): Promise<number> {
     case "files:read": {
       const path = required(rest[0], "a remote path");
       process.stdout.write(await need(ftp, "FTP").read(path));
+      return 0;
+    }
+
+    case "files:download": {
+      const remote = required(rest[0], "a remote path");
+      const local = required(rest[1], "a local destination");
+      const result = await need(ftp, "FTP").download(remote, local);
+      // A download changes nothing on the server, but it lands a durable copy of the site's
+      // data on disk, which is exactly the kind of thing a record should be able to account
+      // for later - the same reason db:dump to a file is recorded.
+      await audit.record("files:download", { path: result.path, localPath: result.localPath, bytes: result.bytes });
+      process.stdout.write(`Downloaded ${result.bytes} bytes from ${result.path} to ${result.localPath}\n`);
       return 0;
     }
 

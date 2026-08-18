@@ -6,8 +6,11 @@
  * script. A line per write, on disk, is what makes "which upload replaced this file?"
  * answerable.
  *
- * Only writes are recorded. Logging reads would bury the entries that matter in noise, and
- * a read changes nothing worth reconstructing later.
+ * Recorded: anything that changes the server, and anything that lands a durable copy of its
+ * data on disk - an upload, a delete, a data-changing statement, a database dump to a file, a
+ * download. A transient read that only returns to the caller (a query, reading a file to
+ * stdout) is not; logging those would bury the entries that matter in noise, and they leave
+ * nothing behind to reconstruct.
  */
 
 import { appendFile } from "node:fs/promises";

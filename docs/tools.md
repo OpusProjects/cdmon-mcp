@@ -7,6 +7,7 @@ The complete surface an agent can reach, with the arguments each tool takes and 
 - [Which tools appear](#which-tools-appear)
 - [files_list](#files_list)
 - [files_read](#files_read)
+- [files_download](#files_download)
 - [files_upload](#files_upload)
 - [files_delete](#files_delete)
 - [db_query](#db_query)
@@ -59,6 +60,34 @@ Reads a small text file: a config file, a template, a log.
 Files over 256 KB are refused rather than truncated. Half a file returned as though it were
 whole is worse than an error, because the caller cannot tell the difference — and an agent
 that reads half a config file will confidently edit the wrong thing.
+
+For anything larger, or anything not text, use `files:download` instead.
+
+---
+
+## files_download
+
+Streams a remote file to a local path, byte for byte. **Command line only** — see below.
+
+| Argument | Meaning |
+|---|---|
+| `<remote>` | File on the site, relative to the root |
+| `<local>` | Local destination; its parent directory must already exist |
+
+This is the counterpart to `files_read`, for the cases `read` deliberately will not handle: a
+file of any size, and a file that is not text. `read` decodes as UTF-8 and caps at 256 KB, so a
+JPEG read that way comes back inflated and corrupt; `download` writes the raw bytes to disk, so
+a backup or an image arrives intact. A failed transfer removes the partial file rather than
+leaving a truncated one that looks whole.
+
+It is read-only on the server and needs no `CDMON_ALLOW_WRITES` — it writes to your disk, not to
+the site. It is recorded in the audit log all the same, because it lands a durable copy of the
+site's data.
+
+It has no MCP tool on purpose. The MCP tools never take a local filesystem path — `files_upload`
+takes `content`, not a local file — so the server a model drives cannot read or write the local
+disk by path. A download is inherently local-path-shaped, so it lives on the CLI, where scripts
+and CI jobs are the ones fetching backups.
 
 ---
 
@@ -177,6 +206,10 @@ Every tool has a command, over the same code, for jobs with no model in them.
 | `db_query` | `cdmon db:query <sql> [--max-rows N]` |
 | `db_execute` | `cdmon db:execute <file.sql> [--apply] [--max-rows N]` |
 | `db_dump` | `cdmon db:dump [file.sql]` |
+| _(none)_ | `cdmon files:download <remote> <local>` |
+
+`files:download` is the one command with no MCP tool behind it, because it writes to a local
+path and the MCP tools deliberately never do. See [files_download](#files_download).
 
 The `dryRun` argument becomes `--apply`, inverted: both faces default to not writing, and both
 require the caller to say so a second time. `maxRows` becomes `--max-rows`, with the same
