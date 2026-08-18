@@ -10,6 +10,7 @@ How the database half works, and exactly which parts of somebody else's web inte
 - [The login sequence](#the-login-sequence)
 - [The token rotates](#the-token-rotates)
 - [Running a statement](#running-a-statement)
+- [Exporting the database](#exporting-the-database)
 - [Reading the response](#reading-the-response)
 - [What it depends on](#what-it-depends-on)
 - [When phpMyAdmin changes](#when-phpmyadmin-changes)
@@ -136,6 +137,28 @@ what a restore does.
 
 ---
 
+## Exporting the database
+
+A dump is two requests, because the export must name every table and only the export form knows
+what they are.
+
+| Step | Request | Purpose |
+|---|---|---|
+| 1 | `GET /index.php?route=/database/export&db=<db>` | Fetch the form, and the `table_select[]` list and rotated token off it |
+| 2 | `POST /index.php?route=/export` | Send the SQL export options plus each table three times |
+
+Each table is named as `table_select[]`, `table_structure[]` and `table_data[]` — schema and
+data both. Asking for the database without enumerating the tables returns an empty dump, which
+is why the form is fetched first rather than guessed at.
+
+The rest of the POST is phpMyAdmin's "quick" SQL export: `export_type=database`, `what=sql`,
+`sql_structure_or_data=structure_and_data`, `output_format=sendit`, `compression=none`. The
+response is the SQL itself, not a page. A dump begins with `-- phpMyAdmin SQL Dump`; a body that
+begins with `<!doctype` or `<html>` means the session was refused, and it is raised rather than
+saved — a backup that is secretly an error page is worse than no backup.
+
+---
+
 ## Reading the response
 
 The page is parsed with cheerio, not matched with regular expressions.
@@ -165,10 +188,11 @@ The full list, so the blast radius of an upstream change is knowable rather than
 |---|---|
 | Form field | `pma_username`, `pma_password`, `target`, and either `server` or `pma_domain` + `route` + `lang` |
 | Hidden field | `token`, `set_session` |
-| Route | `/index.php`, `/index.php?route=/import` |
+| Route | `/index.php`, `/index.php?route=/import`, `/index.php?route=/database/export`, `/index.php?route=/export` |
 | Query param | `d` (only when a domain is configured) |
 | Query field | `db`, `table`, `sql_query`, `token`, `session_max_rows`, `show_query`, `is_js_confirmed` |
-| Selector | `input[name="token"]`, `.error`, `.alert-danger`, `.result_query`, `.success`, `.alert-success`, `table.table_results tbody tr`, `td[data-type]`, `td.data` |
+| Export field | `export_type`, `export_method`, `what`, `sql_structure_or_data`, `output_format`, `compression`, and `table_select[]` / `table_structure[]` / `table_data[]` per table |
+| Selector | `input[name="token"]`, `input[name="table_select[]"]`, `.error`, `.alert-danger`, `.result_query`, `.success`, `.alert-success`, `table.table_results tbody tr`, `td[data-type]`, `td.data` |
 
 Tested against phpMyAdmin 5.x. These names have been stable for years, which is a reason for
 confidence and not a guarantee.

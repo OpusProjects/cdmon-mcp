@@ -11,6 +11,7 @@ The complete surface an agent can reach, with the arguments each tool takes and 
 - [files_delete](#files_delete)
 - [db_query](#db_query)
 - [db_execute](#db_execute)
+- [db_dump](#db_dump)
 - [CLI equivalents](#cli-equivalents)
 
 ---
@@ -140,6 +141,29 @@ see [safety.md](safety.md) for why.
 
 ---
 
+## db_dump
+
+Exports the whole database as SQL — schema and data, every table.
+
+This tool takes no arguments and returns the dump. It is read-only: phpMyAdmin builds the SQL
+and hands it back, changing nothing, so it needs no `CDMON_ALLOW_WRITES` — the same standing as
+`db_query`.
+
+It is the backup to take before letting anything near `db_execute`. On the CLI, `db:dump` writes
+to a file when given one and to standard output otherwise:
+
+```bash
+cdmon db:dump backup.sql          # 126053 bytes written to backup.sql
+cdmon db:dump > backup.sql        # same, via a redirect
+```
+
+The export is a two-request conversation rather than one call — phpMyAdmin lists the tables on
+its export form, and the export must name each of them — but that is internal; see
+[phpmyadmin.md](phpmyadmin.md). A response that comes back as an HTML page rather than SQL is
+treated as a failed export and raised, never returned as though it were a backup.
+
+---
+
 ## CLI equivalents
 
 Every tool has a command, over the same code, for jobs with no model in them.
@@ -152,6 +176,7 @@ Every tool has a command, over the same code, for jobs with no model in them.
 | `files_delete` | `cdmon files:delete <remote> [--apply]` |
 | `db_query` | `cdmon db:query <sql> [--max-rows N]` |
 | `db_execute` | `cdmon db:execute <file.sql> [--apply] [--max-rows N]` |
+| `db_dump` | `cdmon db:dump [file.sql]` |
 
 The `dryRun` argument becomes `--apply`, inverted: both faces default to not writing, and both
 require the caller to say so a second time. `maxRows` becomes `--max-rows`, with the same

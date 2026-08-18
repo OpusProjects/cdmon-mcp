@@ -178,6 +178,20 @@ if (pma) {
       }
     },
   );
+
+  server.registerTool(
+    "db_dump",
+    {
+      description:
+        "Export the whole database as SQL — schema and data, every table. Read-only, so it " +
+        "needs no write permission. Take this before running a migration.",
+      inputSchema: {},
+    },
+    async () => {
+      const sql = await pma.dump();
+      return text(sql);
+    },
+  );
 }
 
 /** One line per statement, so a partial application is visible at a glance. */

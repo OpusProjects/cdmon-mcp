@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `db_dump` (`cdmon db:dump [file]`) — export the whole database as SQL, schema and data. Read-only,
+  so it needs no write permission; the backup to take before a migration.
+
 ## [0.1.0] - 2026-08-17
 
 ### Added

@@ -135,6 +135,96 @@ export class PhpMyAdminClient {
     return results;
   }
 
+  /**
+   * Export the whole configured database as SQL: schema and data, every table.
+   *
+   * This is the backup you take before letting anything near `execute`. It changes nothing
+   * on the server - phpMyAdmin builds the dump and hands it back over HTTP - so it needs no
+   * write permission, the same as a read query.
+   *
+   * The export is a two-step conversation, not one request. phpMyAdmin's export form lists
+   * the tables in hidden fields, and the export itself must name each one; asking for "the
+   * database" without enumerating them yields an empty dump. So the form is fetched, the
+   * table names read off it, and the export posts them back.
+   *
+   * @returns The dump as SQL text.
+   * @throws Error if the database has no tables to export, or the server answers with a page
+   *               instead of SQL (which means the session was not accepted).
+   */
+  async dump(): Promise<string> {
+    await this.login();
+
+    // Step one: the export form, which carries both a fresh token and the table list.
+    const formHtml = await this.get(
+      `/index.php?route=/database/export&db=${encodeURIComponent(this.cfg.database)}` +
+        `&token=${this.token as string}`,
+    );
+    const $form = cheerio.load(formHtml);
+    const rotated = $form('input[name="token"]').attr("value") ?? extractTokenFromScript(formHtml);
+    if (rotated) this.token = rotated;
+
+    const tables: string[] = [];
+    $form('input[name="table_select[]"]').each((_, el) => {
+      const value = $form(el).attr("value");
+      if (value) tables.push(value);
+    });
+
+    if (tables.length === 0) {
+      throw new Error(
+        `No tables found to export in '${this.cfg.database}'. The database may be empty, or ` +
+          "the export form did not load - check that the login and CDMON_PMA_DOMAIN are right.",
+      );
+    }
+
+    // Step two: the export itself. These options are phpMyAdmin's "quick" SQL export with
+    // structure and data for every table - the shape a restore expects.
+    const form = new URLSearchParams({
+      db: this.cfg.database,
+      token: this.token as string,
+      table: "",
+      export_type: "database",
+      export_method: "quick",
+      quick_or_custom: "custom",
+      what: "sql",
+      structure_or_data_forced: "0",
+      sql_include_comments: "something",
+      sql_compatibility: "NONE",
+      sql_structure_or_data: "structure_and_data",
+      sql_create_table: "something",
+      sql_auto_increment: "something",
+      sql_create_view: "something",
+      sql_procedure_function: "something",
+      sql_create_trigger: "something",
+      sql_backquotes: "something",
+      sql_type: "INSERT",
+      sql_insert_syntax: "both",
+      sql_max_query_size: "50000",
+      sql_utc_time: "something",
+      output_format: "sendit",
+      filename_template: "@DATABASE@",
+      compression: "none",
+    });
+    for (const table of tables) {
+      form.append("table_select[]", table);
+      form.append("table_structure[]", table);
+      form.append("table_data[]", table);
+    }
+
+    const body = await this.post("/index.php?route=/export", form);
+
+    // A dump starts with SQL comments, never with markup. Getting a page back means the
+    // export was refused - usually an expired session - and returning it as though it were a
+    // backup would be the worst possible outcome for a backup.
+    if (/^\s*<(?:!doctype|html)/i.test(body)) {
+      throw new Error(
+        "The export returned an HTML page instead of SQL, so the dump was not produced. " +
+          "The session was most likely not accepted; check the credentials and CDMON_PMA_DOMAIN.",
+      );
+    }
+
+    return body;
+  }
+
   /** Log in and capture the token every later request must carry. */
   private async login(): Promise<void> {
     if (this.token) return;

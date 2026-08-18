@@ -13,7 +13,7 @@
  * nothing.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import { FtpClient } from "./ftp.js";
@@ -30,6 +30,7 @@ Usage:
   cdmon files:delete <remote> [--apply]
   cdmon db:query <sql> [--max-rows N]
   cdmon db:execute <file.sql> [--apply] [--max-rows N]
+  cdmon db:dump [file.sql]
 
 Writes are a dry run unless --apply is given. Applying requires CDMON_ALLOW_WRITES=1;
 a dry run does not, so a migration can be previewed from a read-only session.
@@ -144,6 +145,21 @@ async function main(argv: string[]): Promise<number> {
         await audit.record("db:execute", { file, error: String(err) }, "failed");
         throw err;
       }
+    }
+
+    case "db:dump": {
+      const sql = await need(pma, "phpMyAdmin").dump();
+      const out = rest[0];
+      if (out) {
+        await writeFile(out, sql, "utf8");
+        // A dump only means anything once it is somewhere durable, so the file it landed in
+        // is worth recording even though the export changed nothing on the server.
+        await audit.record("db:dump", { file: out, bytes: Buffer.byteLength(sql, "utf8") });
+        process.stdout.write(`Dumped ${Buffer.byteLength(sql, "utf8")} bytes to ${out}\n`);
+      } else {
+        process.stdout.write(sql);
+      }
+      return 0;
     }
 
     default:
