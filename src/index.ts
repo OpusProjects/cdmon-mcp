@@ -26,7 +26,7 @@ const audit = new AuditLog(config.auditLog);
 const ftp = config.ftp ? new FtpClient(config.ftp) : null;
 const pma = config.pma ? new PhpMyAdminClient(config.pma) : null;
 
-const server = new McpServer({ name: "cdmon-mcp", version: "0.1.0" });
+const server = new McpServer({ name: "cdmon-mcp", version: "0.2.0" });
 
 /**
  * Refuse a write when the operator has not opted in.

@@ -76,8 +76,18 @@ Do not weaken these without saying so explicitly:
   address blocked. Do not make the pause conditional on success.
 - **Credentials come from the environment, never from a tool argument.** A model must not be
   able to read, pass or repeat one.
+- **MCP tools never take a local filesystem path.** `files_upload` takes `content`, not a file,
+  so a model's server cannot read or write local disk by path. This is why `files:download`
+  (local-path-shaped by nature) is a CLI command with no MCP tool, and why `db_dump` returns
+  the SQL rather than writing a file. Adding an MCP tool that takes a local path breaks this.
+- **A dump that is secretly an error page is worse than no dump.** `PhpMyAdminClient.dump`
+  raises when the body comes back as HTML rather than SQL. A backup is trusted precisely when
+  you least want to check it, so it must never hand back a page dressed as a backup.
 - **`AuditLog.record` swallows its own failures.** A full disk must not turn a successful deploy
   into a reported failure.
+- **The audit log records actions that change the server or land a durable copy of its data** —
+  uploads, deletes, data-changing SQL, a dump to a file, a download. Transient reads (a query,
+  a file read to stdout) are not recorded; do not add them.
 
 ## Structure decisions already made
 
@@ -92,12 +102,16 @@ Do not "tidy" these — they were deliberate, and the reasoning is in `docs/deve
 
 ## phpMyAdmin
 
-It is a scraped web session, because cdmon exposes no database API. Four traps:
+It is a scraped web session, because cdmon exposes no database API. The traps that bite:
 
 - **SQL executes at `route=/import`, not `route=/sql`.** `/sql` renders an already-executed
   result, so posting a statement there runs nothing and returns a page with no error on it —
   a no-op reported as success. This was a real bug, found by comparing against a working
   shell script rather than by any test.
+- **A database export is two requests, not one.** The export at `route=/export` must name every
+  table (`table_select[]` / `table_structure[]` / `table_data[]`), and only the export form at
+  `route=/database/export` knows what they are. Fetch the form, read the table list off it,
+  then post. Asking for the database without enumerating the tables yields an empty dump.
 - **cdmon serves phpMyAdmin without the intermediate certificate**, so Node cannot build the
   chain and every request fails before it is sent. The fix is `NODE_EXTRA_CA_CERTS` pointing at
   the missing intermediate, never a flag that skips verification — the database password

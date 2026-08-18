@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-18
+
 ### Added
 
 - `db_dump` (`cdmon db:dump [file]`) — export the whole database as SQL, schema and data. Read-only,
@@ -31,5 +33,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Refusal of SQL that drives its own transactions, which cannot span statements sent separately.
 - Append-only audit log of every write, with credential-shaped values redacted.
 
-[Unreleased]: https://github.com/OpusProjects/cdmon-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/OpusProjects/cdmon-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/OpusProjects/cdmon-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/OpusProjects/cdmon-mcp/releases/tag/v0.1.0
