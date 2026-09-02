@@ -180,9 +180,26 @@ export function usesTransactionControl(sql: string): boolean {
   );
 }
 
-/** Is this statement read-only? Used to keep `db_query` harmless without the write flag. */
+/**
+ * Is this statement read-only? Used to keep `db_query` harmless without the write flag.
+ *
+ * The leading keyword is not enough on its own. Two shapes start like a read and are not:
+ *
+ * - `EXPLAIN ANALYZE <statement>` runs the statement to time it, and MySQL 8 accepts an
+ *   `UPDATE` or `DELETE` there, so the rows change while the output looks like a query plan.
+ *   Plain `EXPLAIN` only describes the plan and stays allowed.
+ * - `SELECT ... INTO OUTFILE` and `INTO DUMPFILE` write a file on the database host. Nothing
+ *   in the database changes, but a file appearing on a server is not what read-only means.
+ *
+ * Both are refused outright rather than parsed around. A string literal that happens to
+ * contain `INTO OUTFILE` is refused too; that costs a false refusal, which is the cheap
+ * direction to be wrong in here.
+ */
 export function isReadOnly(sql: string): boolean {
-  return /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sql.trim());
+  const text = sql.trim();
+  if (!/^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(text)) return false;
+  if (/^(EXPLAIN|DESCRIBE|DESC)\s+ANALYZE\b/i.test(text)) return false;
+  return !/\bINTO\s+(OUTFILE|DUMPFILE)\b/i.test(text);
 }
 
 /**

@@ -132,7 +132,9 @@ Runs a read-only query and returns the rows.
 | `sql` | string | — | A single read-only statement |
 | `maxRows` | number | `200` | Values returned before the rest are reported as held back |
 
-`SELECT`, `SHOW`, `DESCRIBE` and `EXPLAIN` are accepted; anything else is refused by name:
+`SELECT`, `SHOW`, `DESCRIBE` and `EXPLAIN` are accepted — except `EXPLAIN ANALYZE`, which runs
+what it explains, and `SELECT ... INTO OUTFILE`, which writes a file. Anything else is refused by
+name:
 
 ```
 db_query is read-only; statement 1 is not: UPDATE users SET active = 0. Use db_execute.

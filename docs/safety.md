@@ -11,6 +11,7 @@ What this tool refuses to do, and why each refusal is there.
 - [The rate limit](#the-rate-limit)
 - [One statement per request](#one-statement-per-request)
 - [Transaction control is refused](#transaction-control-is-refused)
+- [What counts as read-only](#what-counts-as-read-only)
 - [Credentials](#credentials)
 - [The audit log](#the-audit-log)
 - [What is not protected](#what-is-not-protected)
@@ -117,6 +118,22 @@ could not span them: `BEGIN` would commit nothing and `ROLLBACK` would undo noth
 a file anyway would turn an all-or-nothing migration into a partial one while appearing to honour
 it. The check reads the SQL properly, so the word appearing inside a string or a column name does
 not trip it.
+
+---
+
+## What counts as read-only
+
+`db_query` accepts `SELECT`, `SHOW`, `DESCRIBE` and `EXPLAIN`, minus two shapes that only look like reads.
+
+| Refused | Why |
+|---|---|
+| `EXPLAIN ANALYZE ...` | Runs the statement to time it, and MySQL 8 accepts an `UPDATE` or `DELETE` there |
+| `SELECT ... INTO OUTFILE` / `INTO DUMPFILE` | Writes a file on the database host |
+
+A plain `EXPLAIN` only describes the plan and stays allowed. The two above are refused by pattern
+rather than parsed around, so a string literal containing `INTO OUTFILE` is refused as well; that
+is a false refusal, which is the cheap direction to be wrong in. Anything refused here can still
+be run through `db_execute` with `CDMON_ALLOW_WRITES` set, where it is recorded as a write.
 
 ---
 

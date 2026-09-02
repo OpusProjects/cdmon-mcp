@@ -128,6 +128,35 @@ describe("isReadOnly", () => {
       expect(isReadOnly(s)).toBe(false);
     }
   });
+
+  it("rejects EXPLAIN ANALYZE, which executes the statement it explains", () => {
+    // MySQL 8 runs the wrapped statement to time it, so this one changes every row while the
+    // output reads like a query plan. The leading keyword alone would have let it through.
+    for (const s of [
+      "EXPLAIN ANALYZE UPDATE t SET a=1",
+      "explain  analyze DELETE FROM t",
+      "DESC ANALYZE UPDATE t SET a=1",
+      "EXPLAIN ANALYZE FORMAT=TREE SELECT 1",
+    ]) {
+      expect(isReadOnly(s)).toBe(false);
+    }
+  });
+
+  it("still accepts a plain EXPLAIN, which only describes the plan", () => {
+    expect(isReadOnly("EXPLAIN UPDATE t SET a=1")).toBe(true);
+    expect(isReadOnly("EXPLAIN FORMAT=JSON SELECT 1")).toBe(true);
+  });
+
+  it("rejects a SELECT that writes a file on the server", () => {
+    expect(isReadOnly("SELECT * FROM t INTO OUTFILE '/tmp/t.csv'")).toBe(false);
+    expect(isReadOnly("SELECT blob FROM t INTO   DUMPFILE '/tmp/t.bin'")).toBe(false);
+    expect(isReadOnly("select 1 into outfile 'x'")).toBe(false);
+  });
+
+  it("does not mistake a column called outfile for a file write", () => {
+    expect(isReadOnly("SELECT outfile, dumpfile FROM t")).toBe(true);
+    expect(isReadOnly("SELECT * FROM t WHERE into_outfile = 1")).toBe(true);
+  });
 });
 
 describe("hasExecutableSql", () => {
