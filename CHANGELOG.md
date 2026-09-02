@@ -11,6 +11,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The `cdmon` and `cdmon-mcp` commands did nothing, and exited 0, when run through the links
   `npm link` or `npm install -g` create. The main-module check now resolves symlinks first.
+- `db_query` and `db:query` refused only by leading keyword, so `EXPLAIN ANALYZE UPDATE ...`
+  changed rows and `SELECT ... INTO OUTFILE` wrote a file from a read-only query. Both are now
+  refused, like any other write.
 
 ## [0.2.0] - 2026-08-18
 
