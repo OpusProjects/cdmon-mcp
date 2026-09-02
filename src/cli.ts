@@ -108,10 +108,19 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       needWrites();
-      const result = await need(ftp, "FTP").upload(remote, content);
-      await audit.record("files:upload", result);
-      process.stdout.write(`Uploaded ${result.bytes} bytes to ${result.path}\n`);
-      return 0;
+
+      // Recorded either way, as db:execute is. A transfer that broke off may have left a
+      // partial file behind, and a log that only lists the uploads that succeeded cannot
+      // explain a truncated file on the site.
+      try {
+        const result = await need(ftp, "FTP").upload(remote, content);
+        await audit.record("files:upload", result);
+        process.stdout.write(`Uploaded ${result.bytes} bytes to ${result.path}\n`);
+        return 0;
+      } catch (err) {
+        await audit.record("files:upload", { path: remote, error: String(err) }, "failed");
+        throw err;
+      }
     }
 
     case "files:delete": {
@@ -122,10 +131,16 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       needWrites();
-      const result = await need(ftp, "FTP").remove(remote);
-      await audit.record("files:delete", result);
-      process.stdout.write(`Deleted ${result.path}\n`);
-      return 0;
+
+      try {
+        const result = await need(ftp, "FTP").remove(remote);
+        await audit.record("files:delete", result);
+        process.stdout.write(`Deleted ${result.path}\n`);
+        return 0;
+      } catch (err) {
+        await audit.record("files:delete", { path: remote, error: String(err) }, "failed");
+        throw err;
+      }
     }
 
     case "db:query": {

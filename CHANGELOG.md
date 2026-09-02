@@ -20,6 +20,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The upload dry run reported the file's length in characters, while the upload itself counted
   bytes, so a file with accents or emoji previewed at one size and landed at another. Both now
   report UTF-8 bytes.
+- An upload or delete that failed on the server left no trace in the audit log, unlike a failed
+  `db_execute`. Both now record a `failed` entry carrying the path and the error.
 
 ## [0.2.0] - 2026-08-18
 
