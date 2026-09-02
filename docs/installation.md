@@ -35,7 +35,8 @@ npm install       # also builds, via the prepare script
 ```
 
 That leaves two executables under `dist/`: `dist/index.js` is the MCP server, and
-`dist/cli.js` is the `cdmon` command.
+`dist/cli.js` is the `cdmon` command. `npm link` puts both on your `PATH`, as `cdmon-mcp` and
+`cdmon`, for the shell and for CI scripts.
 
 ---
 

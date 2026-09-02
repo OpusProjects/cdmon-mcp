@@ -13,8 +13,9 @@
  * nothing.
  */
 
+import { realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
 import { FtpClient } from "./ftp.js";
 import { PhpMyAdminClient, StatementError } from "./phpmyadmin.js";
@@ -249,13 +250,34 @@ function required(value: string | undefined, what: string): string {
   return value;
 }
 
+/**
+ * Is this module the command that was run, rather than something that was imported?
+ *
+ * Both sides are resolved through the filesystem before comparing. Node resolves the entry
+ * point's symlinks before loading it, so `import.meta.url` names the real file - while
+ * `process.argv[1]` is the path as typed, which through the `bin` link npm installs is
+ * `.../node_modules/.bin/cdmon`. Comparing the two as strings therefore never matched from an
+ * installed command: `cdmon --help` printed nothing and exited 0, and a deploy step in CI ran
+ * no command at all while reporting success. A path that cannot be resolved is not this module.
+ *
+ * Exported for testing.
+ *
+ * @param moduleUrl `import.meta.url` of the module asking.
+ * @param argv1     `process.argv[1]`, the script Node was told to run, if any.
+ */
+export function isInvokedDirectly(moduleUrl: string, argv1: string | undefined): boolean {
+  if (argv1 === undefined) return false;
+  try {
+    return realpathSync(fileURLToPath(moduleUrl)) === realpathSync(argv1);
+  } catch {
+    return false;
+  }
+}
+
 // Run only when invoked as a command, not when imported. Without this, importing anything
 // from here - as the tests do, to reach parseFlags - executes a command as a side effect of
 // the import, which at best prints usage and at worst acts on a live site.
-const invokedDirectly =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (invokedDirectly) {
+if (isInvokedDirectly(import.meta.url, process.argv[1])) {
   // Set the exit code rather than calling process.exit(). When stdout is a pipe rather than a
   // terminal, writes to it are asynchronous, and process.exit() discards whatever has not
   // flushed yet - so `cdmon files:read big.sql | grep ...` silently lost everything past the

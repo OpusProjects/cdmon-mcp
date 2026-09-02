@@ -6,8 +6,12 @@
  * someone to do has to be something they can actually do.
  */
 
-import { describe, expect, it } from "vitest";
-import { parseFlags } from "../src/cli.js";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { isInvokedDirectly, parseFlags } from "../src/cli.js";
 
 describe("parseFlags", () => {
   it("keeps positional arguments in order", () => {
@@ -57,5 +61,53 @@ describe("parseFlags", () => {
       expect(parsed.maxRows).toBe(50);
       expect(parsed.rest).toEqual(["db:execute", "m.sql"]);
     }
+  });
+});
+
+describe("isInvokedDirectly", () => {
+  /**
+   * The guard that decides whether importing this module runs a command.
+   *
+   * It has to be right in both directions. Too loose and `import { parseFlags }` prints usage
+   * or acts on a live site; too strict and the installed command does nothing at all - which
+   * is what happened through the `bin` link npm creates, because Node resolves the link before
+   * loading the entry point while `process.argv[1]` still names the link.
+   */
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "cdmon-cli-"));
+    await writeFile(path.join(dir, "cli.js"), "");
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("recognises the script Node was given", () => {
+    const real = path.join(dir, "cli.js");
+    expect(isInvokedDirectly(pathToFileURL(real).href, real)).toBe(true);
+  });
+
+  it("recognises the script when it was reached through a symlink", async () => {
+    // The shape `npm link` and `npm install -g` produce: a link in a bin directory pointing at
+    // the real file. The module URL names the target; argv[1] names the link.
+    const real = path.join(dir, "cli.js");
+    const link = path.join(dir, "cdmon");
+    await symlink(real, link);
+    expect(isInvokedDirectly(pathToFileURL(real).href, link)).toBe(true);
+  });
+
+  it("does not fire when the module was merely imported", async () => {
+    const real = path.join(dir, "cli.js");
+    const other = path.join(dir, "other.js");
+    await writeFile(other, "");
+    expect(isInvokedDirectly(pathToFileURL(real).href, other)).toBe(false);
+  });
+
+  it("does not fire without a script argument, or with one that does not exist", () => {
+    const real = path.join(dir, "cli.js");
+    expect(isInvokedDirectly(pathToFileURL(real).href, undefined)).toBe(false);
+    expect(isInvokedDirectly(pathToFileURL(real).href, path.join(dir, "missing.js"))).toBe(false);
   });
 });
