@@ -17,6 +17,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A statement sent after phpMyAdmin had expired the session (24 idle minutes by default) was
   reported as applied with nothing affected, because the login page came back with no error on
   it. The client now recognises that page, logs in again and re-sends the statement once.
+- The upload dry run reported the file's length in characters, while the upload itself counted
+  bytes, so a file with accents or emoji previewed at one size and landed at another. Both now
+  report UTF-8 bytes.
 
 ## [0.2.0] - 2026-08-18
 

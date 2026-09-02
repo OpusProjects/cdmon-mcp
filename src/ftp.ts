@@ -123,6 +123,20 @@ export interface RemoteEntry {
  * competing connections, and each is followed by a delay. The delay applies after failures
  * too: a burst of errors is exactly the pattern that gets an address blocked.
  */
+/**
+ * The number of bytes `upload` will send for this content.
+ *
+ * Shared with the dry runs so that a preview and the upload it previews agree. They did not:
+ * the dry run reported `content.length`, which counts UTF-16 code units, while the upload
+ * counted the UTF-8 bytes it wrote - so a file with accents or emoji previewed at one size and
+ * landed at another, and an operator comparing the two saw a discrepancy that did not exist.
+ *
+ * @param content Text destined for the server, sent as UTF-8.
+ */
+export function uploadSize(content: string): number {
+  return Buffer.byteLength(content, "utf8");
+}
+
 export class FtpClient {
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -192,7 +206,7 @@ export class FtpClient {
     return this.withClient(async (client) => {
       const dir = path.posix.dirname(target);
       if (dir && dir !== "/" && dir !== ".") await client.ensureDir(dir);
-      const bytes = Buffer.byteLength(content, "utf8");
+      const bytes = uploadSize(content);
       await client.uploadFrom(Readable.from([content]), target);
       return { path: target, bytes };
     }, target);

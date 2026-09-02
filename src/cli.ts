@@ -17,7 +17,7 @@ import { realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
-import { FtpClient } from "./ftp.js";
+import { FtpClient, uploadSize } from "./ftp.js";
 import { PhpMyAdminClient, StatementError } from "./phpmyadmin.js";
 import { AuditLog } from "./audit.js";
 import { splitStatements, summarise } from "./sql.js";
@@ -103,8 +103,8 @@ async function main(argv: string[]): Promise<number> {
       if (!apply) {
         // Recorded, like the MCP face records its dry runs. An intention that was formed
         // and then not carried out is part of the story the log tells.
-        await audit.record("files:upload", { path: remote, bytes: content.length }, "dry-run");
-        process.stdout.write(`[dry run] would upload ${content.length} bytes to ${remote}\n`);
+        await audit.record("files:upload", { path: remote, bytes: uploadSize(content) }, "dry-run");
+        process.stdout.write(`[dry run] would upload ${uploadSize(content)} bytes to ${remote}\n`);
         return 0;
       }
       needWrites();
