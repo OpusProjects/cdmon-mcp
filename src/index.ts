@@ -94,9 +94,18 @@ if (ftp) {
         return text(`[dry run] would upload ${uploadSize(content)} bytes to ${path}`);
       }
       requireWrites();
-      const result = await ftp.upload(path, content);
-      await audit.record("files_upload", result);
-      return text(`Uploaded ${result.bytes} bytes to ${result.path}`);
+
+      // Recorded either way, as db_execute is. A transfer that broke off may have left a
+      // partial file behind, and a log that only lists the uploads that succeeded cannot
+      // explain a truncated file on the site.
+      try {
+        const result = await ftp.upload(path, content);
+        await audit.record("files_upload", result);
+        return text(`Uploaded ${result.bytes} bytes to ${result.path}`);
+      } catch (err) {
+        await audit.record("files_upload", { path, error: String(err) }, "failed");
+        throw err;
+      }
     },
   );
 
@@ -117,9 +126,15 @@ if (ftp) {
         return text(`[dry run] would delete ${path}`);
       }
       requireWrites();
-      const result = await ftp.remove(path);
-      await audit.record("files_delete", result);
-      return text(`Deleted ${result.path}`);
+
+      try {
+        const result = await ftp.remove(path);
+        await audit.record("files_delete", result);
+        return text(`Deleted ${result.path}`);
+      } catch (err) {
+        await audit.record("files_delete", { path, error: String(err) }, "failed");
+        throw err;
+      }
     },
   );
 }

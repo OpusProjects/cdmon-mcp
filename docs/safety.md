@@ -170,6 +170,10 @@ lost, and absent entirely when the CLI ran from a script. A line per write, on d
 makes "which upload replaced this file?" answerable. Reads are not logged, since they change
 nothing and would bury the entries that matter.
 
+The `outcome` is `ok`, `dry-run` or `failed`. A write that was attempted and broke off is
+recorded as `failed` with the error, because an upload that stopped halfway may have left a
+partial file behind, and a log listing only the writes that succeeded could not explain it.
+
 Values under keys that look like credentials are replaced with `[redacted]`, because this file is
 meant to be kept and shared. Failures to write the log are reported on stderr and otherwise
 ignored: a full disk should not turn a successful deploy into a reported failure.
