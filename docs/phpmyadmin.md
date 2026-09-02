@@ -135,6 +135,14 @@ The splitting happens before any of this, in `sql.ts`. It is a small state machi
 boundary, and `/*!40101 ... */` is executable SQL rather than a comment — dropping one changes
 what a restore does.
 
+An expired session answers in the same shape: the login form, status 200, with no error on it.
+phpMyAdmin drops an idle session after 24 minutes by default, and an MCP server outlives that
+many times over, so every response is checked for the login form's `pma_username` field before
+it is read as a result. When it appears, the client logs in again and re-sends the statement —
+once. Nothing ran the first time, since an unauthenticated request is turned away before it
+reaches MySQL, so the retry cannot apply a statement twice; if the login form comes back a
+second time the statement fails by name instead of being reported as applied.
+
 ---
 
 ## Exporting the database
@@ -165,6 +173,7 @@ The page is parsed with cheerio, not matched with regular expressions.
 
 | Wanted | Where it comes from |
 |---|---|
+| Expired session | `input[name="pma_username"]` — the login form, which a result page never carries |
 | Error text | `.error`, `.alert-danger`, `div.result_query .error` |
 | Rows affected | `.result_query`, `.success`, `.alert-success` |
 | Result rows | `table.table_results tbody tr`, cells `td[data-type]` or `td.data` |
@@ -192,7 +201,7 @@ The full list, so the blast radius of an upstream change is knowable rather than
 | Query param | `d` (only when a domain is configured) |
 | Query field | `db`, `table`, `sql_query`, `token`, `session_max_rows`, `show_query`, `is_js_confirmed` |
 | Export field | `export_type`, `export_method`, `what`, `sql_structure_or_data`, `output_format`, `compression`, and `table_select[]` / `table_structure[]` / `table_data[]` per table |
-| Selector | `input[name="token"]`, `input[name="table_select[]"]`, `.error`, `.alert-danger`, `.result_query`, `.success`, `.alert-success`, `table.table_results tbody tr`, `td[data-type]`, `td.data` |
+| Selector | `input[name="token"]`, `input[name="pma_username"]` (the login form, hence an expired session), `input[name="table_select[]"]`, `.error`, `.alert-danger`, `.result_query`, `.success`, `.alert-success`, `table.table_results tbody tr`, `td[data-type]`, `td.data` |
 
 Tested against phpMyAdmin 5.x. These names have been stable for years, which is a reason for
 confidence and not a guarantee.

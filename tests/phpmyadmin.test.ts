@@ -6,7 +6,7 @@
  * which reads exactly like a wrong password.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildUrl,
   describeFetchFailure,
@@ -205,5 +205,84 @@ describe("describeFetchFailure", () => {
   it("copes with a rejection that carries no cause at all", () => {
     expect(describeFetchFailure(new Error("something broke"), BASE)).toContain("something broke");
     expect(describeFetchFailure("not even an error", BASE)).toContain("not even an error");
+  });
+});
+
+describe("an expired session", () => {
+  /**
+   * phpMyAdmin drops an idle session after 24 minutes by default, and answers the next request
+   * with its login form - status 200, no error on it, no grid, no affected count. Read as a
+   * result, that is a statement reported as applied with nothing affected. The MCP server
+   * lives far longer than a session does, so this is the ordinary case, not a corner.
+   */
+  const LOGIN_PAGE =
+    '<html><body><form><input name="pma_username"><input name="pma_password">' +
+    '<input name="token" value="login-token"><input name="set_session" value="s1">' +
+    "</form></body></html>";
+  const home = (token: string) =>
+    `<html><body><input type="hidden" name="token" value="${token}"></body></html>`;
+  const RESULT_PAGE =
+    '<html><body><input type="hidden" name="token" value="after"><div class="success">' +
+    "1 row affected.</div></body></html>";
+
+  /** A scripted server: answers the given pages in order and keeps what it was sent. */
+  function serve(pages: string[]) {
+    const sent: { url: string; body: string | null }[] = [];
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      sent.push({ url: String(url), body: init?.body ? String(init.body) : null });
+      const page = pages.shift();
+      if (page === undefined) throw new Error("test server: no page scripted for this request");
+      return new Response(page, { status: 200, headers: { "content-type": "text/html" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return sent;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("logs in again and re-sends the statement, once", async () => {
+    const sent = serve([
+      LOGIN_PAGE, // GET  /index.php          - first login
+      home("t1"), // POST /index.php          - logged in
+      LOGIN_PAGE, // POST /import             - session gone, login form comes back
+      LOGIN_PAGE, // GET  /index.php          - second login
+      home("t2"), // POST /index.php          - logged in again
+      RESULT_PAGE, // POST /import            - the statement, really run this time
+    ]);
+
+    const [result] = await new PhpMyAdminClient(cfg(null)).execute("UPDATE t SET a = 1");
+
+    expect(result?.affectedRows).toBe(1);
+    const imports = sent.filter((r) => r.url.includes("route=/import"));
+    expect(imports).toHaveLength(2);
+    // The retry carries the new session's token, not the one the login page happened to show.
+    expect(new URLSearchParams(imports[1]?.body ?? "").get("token")).toBe("t2");
+  });
+
+  it("refuses to report the statement as applied when the login page comes back twice", async () => {
+    serve([LOGIN_PAGE, home("t1"), LOGIN_PAGE, LOGIN_PAGE, home("t2"), LOGIN_PAGE]);
+
+    const run = new PhpMyAdminClient(cfg(null)).execute("UPDATE t SET a = 1");
+    await expect(run).rejects.toThrow(/login page again/);
+    await expect(run).rejects.toThrow(/was not run/);
+  });
+
+  it("does not adopt the login form's token as the rotated one", async () => {
+    // The login page carries a `token` input of its own. Reading rotation off it would make
+    // the retry, and every statement after, carry a token the session never issued.
+    const sent = serve([LOGIN_PAGE, home("t1"), LOGIN_PAGE, LOGIN_PAGE, home("t2"), RESULT_PAGE]);
+    await new PhpMyAdminClient(cfg(null)).execute("UPDATE t SET a = 1");
+    for (const r of sent.filter((r) => r.url.includes("route=/import"))) {
+      expect(new URLSearchParams(r.body ?? "").get("token")).not.toBe("login-token");
+    }
+  });
+
+  it("leaves a statement that got a real answer alone", async () => {
+    const sent = serve([LOGIN_PAGE, home("t1"), RESULT_PAGE]);
+    const [result] = await new PhpMyAdminClient(cfg(null)).execute("UPDATE t SET a = 1");
+    expect(result?.affectedRows).toBe(1);
+    expect(sent).toHaveLength(3);
   });
 });
