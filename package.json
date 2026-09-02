@@ -1,6 +1,6 @@
 {
   "name": "cdmon-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Unofficial MCP server and CLI for deploying files and running SQL on cdmon hosting",
   "license": "Apache-2.0",
   "author": "Blai Peidro",
