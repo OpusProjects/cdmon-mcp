@@ -225,9 +225,13 @@ export class PhpMyAdminClient {
     return body;
   }
 
-  /** Log in and capture the token every later request must carry. */
-  private async login(): Promise<void> {
-    if (this.token) return;
+  /** Log in and capture the token every later request must carry. Returns that token. */
+  private async login(): Promise<string> {
+    if (this.token) return this.token;
+
+    // A session being replaced leaves cookies behind that name a session the server has
+    // already forgotten. Sending them along would only have the login page come back again.
+    this.cookies.clear();
 
     const loginPage = await this.get("/index.php");
     const $ = cheerio.load(loginPage);
@@ -257,6 +261,7 @@ export class PhpMyAdminClient {
       );
     }
     this.token = token;
+    return token;
   }
 
   /** Send one statement and turn the response page into a result. */
@@ -275,8 +280,31 @@ export class PhpMyAdminClient {
     // /import, not /sql. This is the endpoint the SQL tab submits to; /sql renders an
     // already-executed result, so posting a statement there runs nothing and returns a
     // page with no error on it - a silent no-op reported as success.
-    const html = await this.post("/index.php?route=/import", form);
-    const $ = cheerio.load(html);
+    let html = await this.post("/index.php?route=/import", form);
+    let $ = cheerio.load(html);
+
+    // An expired session answers the same way: with the login form, status 200, no error on
+    // it. phpMyAdmin drops an idle session after 24 minutes by default, and an MCP server
+    // lives far longer than that, so the first statement of the afternoon met this page and
+    // was reported as applied with nothing affected. The page even carries a `token` input,
+    // so reading the rotation below would have quietly adopted the login form's token too.
+    // Nothing ran - an unauthenticated POST is turned away before it reaches MySQL - so the
+    // statement is safe to send again, once, on a fresh session.
+    if (isLoginPage($)) {
+      this.token = null;
+      form.set("token", await this.login());
+      html = await this.post("/index.php?route=/import", form);
+      $ = cheerio.load(html);
+      if (isLoginPage($)) {
+        throw new StatementError(
+          stmt.index,
+          total,
+          stmt.sql,
+          "phpMyAdmin answered with its login page again after a fresh login, so the " +
+            "statement was not run. Check the credentials and CDMON_PMA_DOMAIN",
+        );
+      }
+    }
 
     // The token rotates on every verified POST. Missing this means the next statement is
     // rejected for a reason that looks nothing like the real one.
@@ -353,6 +381,17 @@ export class PhpMyAdminClient {
       else this.cookies.set(name, value);
     }
   }
+}
+
+/**
+ * Is this the login form rather than a result?
+ *
+ * phpMyAdmin answers an unauthenticated request with the login page and a 200, so this is
+ * the only way to tell an expired session from an empty result: both have no error, no grid
+ * and no affected count. The username field is the one thing a result page never carries.
+ */
+function isLoginPage($: cheerio.CheerioAPI): boolean {
+  return $('input[name="pma_username"]').length > 0;
 }
 
 /** The server's own error text, if it refused the statement. */

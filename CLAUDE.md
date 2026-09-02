@@ -121,6 +121,11 @@ It is a scraped web session, because cdmon exposes no database API. The traps th
   and on the login form as `pma_domain`. Without it the login returns the domain picker, which
   carries no token, and the error reads as a wrong password.
 
+- **An expired session is a login page with a 200.** phpMyAdmin drops an idle session after
+  24 minutes and answers the next POST with the login form — no error, no grid, no count, and
+  a `token` input of its own. Read as a result, that is a statement reported as applied with
+  nothing affected. `runOne` checks for `pma_username` *before* reading the rotated token,
+  logs in again and re-sends once; the statement never ran, so the retry cannot double-apply.
 - **The CSRF token rotates on every verified POST.** Re-read it from *every* response (hidden
   input, or the script block on some versions) before the next statement. Reusing the login
   token works for exactly one statement, and the second fails with a message about the session

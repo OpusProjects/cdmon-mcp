@@ -14,6 +14,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `db_query` and `db:query` refused only by leading keyword, so `EXPLAIN ANALYZE UPDATE ...`
   changed rows and `SELECT ... INTO OUTFILE` wrote a file from a read-only query. Both are now
   refused, like any other write.
+- A statement sent after phpMyAdmin had expired the session (24 idle minutes by default) was
+  reported as applied with nothing affected, because the login page came back with no error on
+  it. The client now recognises that page, logs in again and re-sends the statement once.
 
 ## [0.2.0] - 2026-08-18
 
