@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { describeFtpFailure, isInside, PathError, resolveInsideRoot } from "../src/ftp.js";
+import { describeFtpFailure, isInside, PathError, resolveInsideRoot, uploadSize } from "../src/ftp.js";
 
 const ROOT = "/site/web";
 
@@ -122,5 +122,20 @@ describe("isInside", () => {
   it("accepts the root and anything beneath it", () => {
     expect(isInside("/site/web", "/site/web")).toBe(true);
     expect(isInside("/site/web", "/site/web/css/a.css")).toBe(true);
+  });
+});
+
+describe("uploadSize", () => {
+  it("counts the UTF-8 bytes that will be sent, not the characters", () => {
+    // `content.length` counts UTF-16 code units, and the dry run used to report that. An
+    // accented file previewed at one size and landed at another.
+    expect(uploadSize("plain")).toBe(5);
+    expect(uploadSize("caf\u00e9")).toBe(5);
+    expect(uploadSize("\u20ac")).toBe(3);
+    expect(uploadSize("\u{1F600}")).toBe(4);
+  });
+
+  it("is zero for an empty file", () => {
+    expect(uploadSize("")).toBe(0);
   });
 });

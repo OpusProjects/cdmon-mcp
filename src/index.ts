@@ -16,7 +16,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { loadConfig } from "./config.js";
-import { FtpClient } from "./ftp.js";
+import { FtpClient, uploadSize } from "./ftp.js";
 import { PhpMyAdminClient } from "./phpmyadmin.js";
 import { AuditLog } from "./audit.js";
 import { splitStatements, summarise } from "./sql.js";
@@ -90,8 +90,8 @@ if (ftp) {
     },
     async ({ path, content, dryRun }) => {
       if (dryRun) {
-        await audit.record("files_upload", { path, bytes: content.length }, "dry-run");
-        return text(`[dry run] would upload ${content.length} bytes to ${path}`);
+        await audit.record("files_upload", { path, bytes: uploadSize(content) }, "dry-run");
+        return text(`[dry run] would upload ${uploadSize(content)} bytes to ${path}`);
       }
       requireWrites();
       const result = await ftp.upload(path, content);
