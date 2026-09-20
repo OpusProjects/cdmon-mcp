@@ -49,7 +49,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "basic-ftp": "^6.2.1",
     "cheerio": "^1.2.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
