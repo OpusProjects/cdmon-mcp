@@ -51,7 +51,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Refusal of SQL that drives its own transactions, which cannot span statements sent separately.
 - Append-only audit log of every write, with credential-shaped values redacted.
 
-[Unreleased]: https://github.com/OpusProjects/cdmon-mcp/compare/v0.2.1...HEAD
-[0.2.1]: https://github.com/OpusProjects/cdmon-mcp/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/OpusProjects/cdmon-mcp/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/OpusProjects/cdmon-mcp/releases/tag/v0.1.0
+[Unreleased]: https://github.com/blaipr/cdmon-mcp/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/blaipr/cdmon-mcp/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/blaipr/cdmon-mcp/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/blaipr/cdmon-mcp/releases/tag/v0.1.0

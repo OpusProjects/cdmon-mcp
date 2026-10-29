@@ -21,12 +21,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OpusProjects/cdmon-mcp.git"
+    "url": "git+https://github.com/blaipr/cdmon-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/OpusProjects/cdmon-mcp/issues"
+    "url": "https://github.com/blaipr/cdmon-mcp/issues"
   },
-  "homepage": "https://github.com/OpusProjects/cdmon-mcp#readme",
+  "homepage": "https://github.com/blaipr/cdmon-mcp#readme",
   "keywords": [
     "mcp",
     "model-context-protocol",

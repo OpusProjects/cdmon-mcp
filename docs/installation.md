@@ -29,7 +29,7 @@ that already exist, so the host needs no SSH, no Composer, no Node and no build 
 Install from the repository, since this is not published to npm.
 
 ```bash
-git clone https://github.com/OpusProjects/cdmon-mcp.git
+git clone https://github.com/blaipr/cdmon-mcp.git
 cd cdmon-mcp
 npm install       # also builds, via the prepare script
 ```

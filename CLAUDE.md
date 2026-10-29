@@ -172,9 +172,7 @@ be rotated. Note that this file is *not* excluded from that last check, so descr
 rather than writing one out.
 
 **Branch protection on `main` is currently off**, by the owner's decision, so commits can be
-amended and force-pushed directly. Prefer `--force-with-lease` over `--force`. This deviates
-from the org convention (PR + required `Test` check + enforce-admins); do not silently restore
-it, and do not silently rely on it either.
+amended and force-pushed directly. Prefer `--force-with-lease` over `--force`.
 
 ## Conventions
 
@@ -182,10 +180,10 @@ it, and do not silently rely on it either.
   `docs`, `test`, `build`, `chore`. One logical change per PR, squash-merged.
 - `docs/*.md`: linked table of contents, a one-line introduction before any table or code block
   in each `##` section, and a `---` rule before each `##` heading.
-- `README.md` is a landing page only — no reference material. It mirrors `OpusProjects/unified-api`:
-  CI badge first with the repo name in its alt text, `✨ Features`, `📚 Documentation` (table, no
-  intro line), `🤝 Contributing`, `👥 Authors`, `⚖️ License`, `---` between sections, no Quick start.
-- Feature bullets are `- **Name**: text` and must fit one rendered GitHub line (≤ ~100 chars).
+- `README.md` is a plain README: no badges and no emoji headings. It covers install, client
+  setup, the command line, the tools, the settings and the safety rules in short, and links
+  `docs/` for the full reference. There are no community files (CONTRIBUTING, SECURITY,
+  CODE_OF_CONDUCT).
 - No orphan lines in prose: a paragraph either fits one rendered line (~116 chars) or carries
   substantial content on its last one. Check by wrapping the text, not by eye.
 - `CHANGELOG.md` follows Keep a Changelog and records **user-observable changes only** — no
@@ -207,4 +205,4 @@ Update the matching file as part of the change, without being asked:
 | Layout, tests, CI or release process | `docs/development.md` |
 | A user-observable change | `CHANGELOG.md` under `Unreleased` |
 
-Add a bullet to `README.md` only when the change is user-facing enough for the top-level list.
+Update `README.md` too when the change alters something it summarises.
